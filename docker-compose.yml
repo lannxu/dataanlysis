@@ -1,0 +1,11 @@
+services:
+  talent-review:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PUBLIC_URL: ${PUBLIC_URL:-}
+    volumes:
+      - ./data:/app/data

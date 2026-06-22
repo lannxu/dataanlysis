@@ -1,0 +1,9 @@
+node_modules/
+.pnpm-store/
+.tmp-template/
+data/
+outputs/
+.agents/
+.codex/
+*.inspect.ndjson
+*.log
