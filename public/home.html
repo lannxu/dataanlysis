@@ -1,0 +1,68 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人才盘点 · 讨论区首页</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell rooms-shell">
+  <div class="top">
+    <div>
+      <div class="brand">人才盘点 · 讨论区首页</div>
+      <div class="muted"><span class="status-dot"></span>每个讨论区都有独立二维码和独立数据</div>
+    </div>
+    <div class="actions">
+      <a class="btn secondary-link" href="/admin.html">进入默认讨论区</a>
+    </div>
+  </div>
+
+  <section class="card room-create-card">
+    <div>
+      <h2>新建讨论区</h2>
+      <p class="muted">例如：销售团队、研发团队、M3 层级、华东区。创建后可单独上传名单、单独扫码评估。</p>
+    </div>
+    <div class="room-create-form">
+      <input id="roomName" placeholder="输入讨论区名称">
+      <button id="createRoom">创建讨论区</button>
+    </div>
+    <div class="toast" id="roomMsg"></div>
+  </section>
+
+  <section class="rooms-grid" id="roomsGrid"></section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function roomUrl(path, id){ const u = new URL(path, location.origin); if (id && id !== 'default') u.searchParams.set('room', id); return u.pathname + u.search; }
+function abs(path, id){ return new URL(roomUrl(path, id), location.origin).toString(); }
+async function loadRooms(){
+  const rooms = await fetch('/api/rooms', {cache:'no-store'}).then(r => r.json());
+  $('#roomsGrid').innerHTML = rooms.map(room => {
+    const qr = '/api/qr.svg?room=' + encodeURIComponent(room.id);
+    return '<article class="card room-card">' +
+      '<div class="room-card-head"><div><h2>' + esc(room.name) + '</h2><p class="muted">' + esc(room.id) + ' · ' + (room.total || 0) + ' 人</p></div><span>讨论区</span></div>' +
+      '<img class="room-qr" src="' + qr + '" alt="' + esc(room.name) + ' 二维码">' +
+      '<a class="url" target="_blank" href="' + roomUrl('/index.html', room.id) + '">' + esc(abs('/index.html', room.id)) + '</a>' +
+      '<div class="room-actions">' +
+        '<a class="btn" href="' + roomUrl('/admin.html', room.id) + '">进入主持后台</a>' +
+        '<a class="btn secondary-link" href="' + roomUrl('/pre.html', room.id) + '">会前初评</a>' +
+        '<a class="btn secondary-link" href="' + roomUrl('/initial-results.html', room.id) + '">初评结果</a>' +
+        '<a class="btn secondary-link" href="' + roomUrl('/summary.html', room.id) + '">当场总览</a>' +
+      '</div>' +
+    '</article>';
+  }).join('') || '<div class="card empty">暂无讨论区</div>';
+}
+$('#createRoom').onclick = async () => {
+  const name = $('#roomName').value.trim();
+  if (!name) { $('#roomMsg').textContent = '请输入讨论区名称'; return; }
+  const response = await fetch('/api/rooms', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})});
+  const data = await response.json();
+  $('#roomMsg').textContent = response.ok ? '已创建：' + data.name : data.error;
+  if (response.ok) { $('#roomName').value = ''; await loadRooms(); }
+};
+loadRooms();
+</script>
+</body>
+</html>

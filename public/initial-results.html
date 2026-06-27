@@ -1,0 +1,435 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人才盘点 · 初评结果</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell summary-shell initial-shell">
+  <div class="top">
+    <div>
+      <div class="brand">人才盘点 · 初评结果</div>
+      <div class="muted"><span class="status-dot"></span><span id="live">数据实时更新</span></div>
+    </div>
+    <div class="actions">
+      <a class="btn secondary-link" href="/admin.html">返回主持后台</a>
+      <a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a>
+      <a class="btn" href="/api/export.csv">导出 CSV</a>
+    </div>
+  </div>
+
+
+  <section class="card initial-import-card">
+    <div>
+      <h2>直接导入初评结果</h2>
+      <p class="muted">适合已经线下收集 Excel 的场景。模板列：员工编号、姓名、评估人、PL、POT、Comments、Skip。</p>
+    </div>
+    <div class="initial-import-actions">
+      <a class="btn secondary-link" href="/api/initial-votes-template.xlsx" download>下载初评导入模板</a>
+      <label class="btn file-btn">上传初评结果 Excel<input id="initialVoteFile" type="file" accept=".xlsx" hidden></label>
+    </div>
+    <div class="toast" id="initialImportStatus"></div>
+  </section>
+
+  <section class="card initial-filter-card">
+    <div>
+      <h2>初评结果查看方式</h2>
+      <p class="muted">可以按岗位级别看一群人的整体落位，也可以点击单个员工，看这个人的初评九宫格分布。</p>
+    </div>
+    <div class="initial-filter-controls initial-mode-controls">
+      <button class="active" id="modeGroup" type="button">岗位级别总览</button>
+      <button class="secondary" id="modePerson" type="button">单人初评</button>
+    </div>
+  </section>
+
+  <section class="card initial-filter-card" id="groupToolbar">
+    <div>
+      <h2>按岗位级别筛选</h2>
+      <p class="muted">系统会优先识别 Excel 字段：岗位级别、职级、岗位等级、层级、Level；没有这些字段时可按岗位筛选。</p>
+    </div>
+    <div class="initial-filter-controls">
+      <select id="levelFilter"></select>
+      <button class="secondary" id="clearFilter">查看全部</button>
+    </div>
+  </section>
+
+  <section class="card initial-person-toolbar" id="personToolbar" hidden>
+    <div>
+      <h2>逐个查看员工初评</h2>
+      <p class="muted">选择员工后，右侧九宫格会显示评委初评票数分布，和主持后台当前员工视图一致。</p>
+    </div>
+    <div class="initial-person-controls">
+      <select id="personPicker"></select>
+      <button class="secondary" id="prevPerson" type="button">上一位</button>
+      <button class="secondary" id="nextPerson" type="button">下一位</button>
+    </div>
+  </section>
+
+  <section id="groupView">
+    <section class="kpis" id="kpis"></section>
+
+    <section class="card" style="margin-top:18px">
+      <div class="section">
+        <div>
+          <h2>筛选后的九宫格初评结果</h2>
+          <span class="muted" id="filterHint">全部员工</span>
+        </div>
+        <span class="muted" id="moveStatus">可拖动姓名到其他宫格；触屏设备可点击姓名调整</span>
+      </div>
+      <div class="ninebox initial-ninebox">
+        <div class="axis-y">潜力 POT 高 → 低</div>
+        <div class="nine-grid" id="nineGrid"></div>
+        <div class="axis-x">绩效 PL 低 → 高</div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:18px">
+      <div class="section"><h2>明细</h2><span class="muted" id="detailCount"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>员工</th><th>部门</th><th>岗位</th><th>岗位级别</th><th>投票人数</th><th>Box 分布</th><th>系统推荐</th><th>Comments</th><th>当前落位</th></tr></thead>
+          <tbody id="detail"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section id="personView" hidden>
+    <section class="host-current-layout initial-person-layout">
+      <section class="host-profile" id="personProfile"></section>
+      <section class="card stage-nine-card initial-person-nine-card">
+        <div class="stage-nine-head">
+          <div>
+            <h2>九宫格初评落位</h2>
+            <p id="personVoteSummary">暂无投票</p>
+          </div>
+          <div class="host-recommend" id="personRecommend">系统建议：--</div>
+        </div>
+        <div class="stage-ninebox">
+          <div class="axis-y">潜力 POT 高 → 低</div>
+          <div class="stage-nine-grid" id="personNineGrid"></div>
+          <div class="axis-x">绩效 PL 低 → 高</div>
+        </div>
+        <div class="stage-decision" id="personDecisionBar"></div>
+      </section>
+    </section>
+  </section>
+</main>
+
+<script>
+const roomId = new URLSearchParams(location.search).get('room') || 'default';
+const roomSuffix = roomId && roomId !== 'default' ? '?room=' + encodeURIComponent(roomId) : '';
+const roomUrl = value => {
+  const u = new URL(value, location.href);
+  if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  return u.pathname + u.search + u.hash;
+};
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => nativeFetch(typeof input === 'string' && input.startsWith('/api/') ? roomUrl(input) : input, init);
+const wsRoomPath = roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : '';
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a[href^="/"]').forEach(link => {
+    const href = link.getAttribute('href') || '';
+    if (!href || href.includes('room=') || href.startsWith('/employee-template')) return;
+    const u = new URL(href, location.href);
+    if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
+    link.href = u.pathname + u.search + u.hash;
+  });
+});
+
+const $ = s => document.querySelector(s);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const boxes = [1,2,3,4,5,6,7,8,9];
+const gridOrder = [6,3,1,8,5,2,9,7,4];
+const levelKeys = ['岗位级别','职级','岗位等级','层级','Level','level','级别'];
+let rows = [];
+let activeLevel = '';
+let mode = 'group';
+let selectedPersonIndex = 0;
+
+function levelOf(row){
+  const fields = row.fields || {};
+  const key = levelKeys.find(name => String(fields[name] ?? '').trim());
+  return key ? String(fields[key]).trim() : (row.role || '未填写');
+}
+
+function placementGrid(row){
+  return row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
+}
+
+function recommendation(row){
+  if (!row.recommendedGrid) return '暂不推荐';
+  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + '<br><b>' + row.recommendedGrid + ' 宫</b>';
+}
+
+function recommendationText(row){
+  if (!row?.recommendedGrid) return '暂不推荐';
+  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + ' · 建议 ' + row.recommendedGrid + ' 宫';
+}
+
+function placementText(row){
+  const grid = placementGrid(row);
+  if (!grid) return row.decision?.type === 'pending' ? '待定' : '暂未落位';
+  const source = row.decision?.type === 'direct' ? '已调整' : '系统推荐';
+  return source + ' · ' + grid + ' 宫';
+}
+
+function boxDistribution(row){
+  return (row.gridCounts || []).map((count, index) => count ? 'Box ' + (index + 1) + '：' + count : '').filter(Boolean).join('；') || '暂无投票';
+}
+
+function voteSummaryText(row){
+  const counts = row?.gridCounts || boxes.map(() => 0);
+  const parts = boxes.map((box, index) => ({box, count: counts[index] || 0}))
+    .filter(x => x.count > 0)
+    .sort((a,b) => b.count - a.count || a.box - b.box);
+  if (!row?.count) return '暂无投票';
+  return row.count + '人投票，' + parts.map(x => x.count + '个在Box ' + x.box).join('，');
+}
+
+function filteredRows(){
+  return activeLevel ? rows.filter(row => levelOf(row) === activeLevel) : rows;
+}
+
+function currentPersonRows(){
+  return filteredRows();
+}
+
+function currentPerson(){
+  const list = currentPersonRows();
+  if (!list.length) return null;
+  selectedPersonIndex = Math.max(0, Math.min(selectedPersonIndex, list.length - 1));
+  return list[selectedPersonIndex];
+}
+
+function renderFilter(){
+  const levels = [...new Set(rows.map(levelOf).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN'));
+  $('#levelFilter').innerHTML = '<option value="">全部岗位级别</option>' + levels.map(level => '<option value="' + esc(level) + '" ' + (level === activeLevel ? 'selected' : '') + '>' + esc(level) + '</option>').join('');
+}
+
+function renderMode(){
+  $('#modeGroup').className = mode === 'group' ? 'active' : 'secondary';
+  $('#modePerson').className = mode === 'person' ? 'active' : 'secondary';
+  $('#groupView').hidden = mode !== 'group';
+  $('#personView').hidden = mode !== 'person';
+  $('#personToolbar').hidden = mode !== 'person';
+  $('#groupToolbar').hidden = false;
+}
+
+function draggedId(event){
+  const encoded = event.dataTransfer.getData('text/plain');
+  return encoded ? decodeURIComponent(encoded) : '';
+}
+
+async function moveEmployee(employeeId, grid){
+  if (!Number.isInteger(grid) || grid < 1 || grid > 9) return;
+  $('#moveStatus').textContent = '正在调整落位…';
+  const response = await fetch('/api/decision', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({employeeId, type:'direct', grid})
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    $('#moveStatus').textContent = data.error || '调整失败';
+    return;
+  }
+  $('#moveStatus').textContent = '已调整到 ' + grid + ' 宫';
+  await load();
+}
+
+function dropTo(event, grid){
+  event.preventDefault();
+  const employeeId = draggedId(event);
+  if (employeeId) moveEmployee(employeeId, grid);
+}
+
+function chooseGrid(employeeId, current){
+  const value = window.prompt('请输入目标宫格（1-9）', String(current || 5));
+  if (value === null) return;
+  const grid = Number(value);
+  if (!Number.isInteger(grid) || grid < 1 || grid > 9) {
+    $('#moveStatus').textContent = '请输入 1-9 的宫格编号';
+    return;
+  }
+  moveEmployee(employeeId, grid);
+}
+
+async function decide(employeeId, type, grid){
+  const body = type === 'direct' ? {employeeId, type, grid:Number(grid)} : {employeeId, type:'pending'};
+  const response = await fetch('/api/decision', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if (response.ok) await load();
+}
+
+function gridOptions(row){
+  const selected = row?.decision?.grid || row?.recommendedGrid || 5;
+  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>' + n + '宫</option>').join('');
+}
+
+function renderGroup(){
+  renderFilter();
+  const list = filteredRows();
+  const reviewed = list.filter(row => row.count > 0);
+  const recommended = list.filter(row => row.recommendedGrid);
+  const adjusted = list.filter(row => row.decision?.type === 'direct');
+  const pending = list.filter(row => row.decision?.type === 'pending');
+  $('#filterHint').textContent = activeLevel ? '当前筛选：' + activeLevel : '全部员工';
+  $('#detailCount').textContent = list.length + ' 人';
+  const stats = [
+    ['筛选员工', list.length, '人'],
+    ['已初评', reviewed.length, '人'],
+    ['累计投票', list.reduce((sum,row) => sum + row.count, 0), '票'],
+    ['有系统推荐', recommended.length, '人'],
+    ['已手动调整', adjusted.length, '人'],
+    ['待定', pending.length, '人']
+  ];
+  $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
+  $('#nineGrid').innerHTML = gridOrder.map(box => {
+    const members = list.filter(row => placementGrid(row) === box);
+    return '<div class="nine-cell cell-' + box + '" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>' + box + ' 宫</b><span>' + members.length + ' 人</span></div><div class="cell-people initial-draggable-people">' +
+      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整宫格；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
+      '</div></div>';
+  }).join('');
+  $('#detail').innerHTML = list.map(row => '<tr>' +
+    '<td><button class="link-button" onclick="openPerson(\'' + encodeURIComponent(row.id) + '\')"><b>' + esc(row.name) + '</b></button></td>' +
+    '<td>' + esc(row.department) + '</td>' +
+    '<td>' + esc(row.role) + '</td>' +
+    '<td>' + esc(levelOf(row)) + '</td>' +
+    '<td>' + row.count + '</td>' +
+    '<td>' + esc(boxDistribution(row)) + '</td>' +
+    '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + recommendation(row) + '</span></td>' +
+    '<td>' + esc((row.comments || []).join(' | ')) + '</td>' +
+    '<td>' + esc(placementText(row)) + '</td>' +
+  '</tr>').join('');
+}
+
+function renderPersonPicker(){
+  const list = currentPersonRows();
+  $('#personPicker').innerHTML = list.length
+    ? list.map((row, index) => '<option value="' + index + '" ' + (index === selectedPersonIndex ? 'selected' : '') + '>' + (index + 1) + '. ' + esc(row.name) + ' · ' + esc(levelOf(row)) + '</option>').join('')
+    : '<option>暂无员工</option>';
+  $('#prevPerson').disabled = selectedPersonIndex <= 0;
+  $('#nextPerson').disabled = selectedPersonIndex >= list.length - 1;
+}
+
+function renderPerson(){
+  renderPersonPicker();
+  const row = currentPerson();
+  if (!row) {
+    $('#personProfile').innerHTML = '<div class="empty">暂无员工</div>';
+    $('#personNineGrid').innerHTML = '';
+    $('#personVoteSummary').textContent = '暂无投票';
+    $('#personRecommend').textContent = '系统建议：--';
+    $('#personDecisionBar').innerHTML = '';
+    return;
+  }
+  const fields = Object.entries(row.fields || {}).filter(([, value]) => String(value ?? '').trim());
+  const facts = [
+    ['员工编号', row.id],
+    ['部门', row.department],
+    ['岗位', row.role],
+    ['岗位级别', levelOf(row)]
+  ].filter(([, value]) => String(value ?? '').trim());
+  $('#personProfile').innerHTML =
+    '<div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
+    '<h1>' + esc(row.name) + '</h1>' +
+    '<p>员工基本信息</p>' +
+    '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
+    (fields.length ? '<div class="host-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
+    ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '');
+
+  const counts = row.gridCounts || boxes.map(() => 0);
+  const max = Math.max(1, ...counts);
+  $('#personVoteSummary').textContent = voteSummaryText(row);
+  $('#personRecommend').textContent = '系统建议：' + recommendationText(row);
+  $('#personNineGrid').innerHTML = gridOrder.map((box) => {
+    const count = counts[box - 1] || 0;
+    const isRecommend = row.recommendedGrid === box;
+    const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
+    return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
+      '<div class="stage-box-top"><b>' + box + ' 宫</b><span>' + count + '票</span></div>' +
+      '<div class="stage-box-count">' + count + '</div>' +
+      '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
+      '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
+    '</div>';
+  }).join('');
+  $('#personDecisionBar').innerHTML =
+    '<div><span>讨论结果</span><b>' + esc(placementText(row)) + '</b></div>' +
+    '<div class="decision-controls current-decision">' +
+      '<select id="personGridSelect">' + gridOptions(row) + '</select>' +
+      '<button onclick="decide(\'' + encodeURIComponent(row.id) + '\',\'direct\',document.querySelector(\'#personGridSelect\').value)">直接落位</button>' +
+      '<button class="secondary" onclick="decide(\'' + encodeURIComponent(row.id) + '\',\'pending\')">待定</button>' +
+    '</div>';
+}
+
+function render(){
+  renderMode();
+  renderGroup();
+  renderPerson();
+}
+
+function openPerson(encodedId){
+  const id = decodeURIComponent(encodedId);
+  const list = currentPersonRows();
+  const index = list.findIndex(row => row.id === id);
+  selectedPersonIndex = Math.max(0, index);
+  mode = 'person';
+  render();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+async function load(){
+  rows = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
+  render();
+}
+
+$('#modeGroup').onclick = () => { mode = 'group'; render(); };
+$('#modePerson').onclick = () => { mode = 'person'; render(); };
+$('#levelFilter').onchange = event => { activeLevel = event.target.value; selectedPersonIndex = 0; render(); };
+$('#clearFilter').onclick = () => { activeLevel = ''; selectedPersonIndex = 0; render(); };
+$('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); };
+$('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); };
+$('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); };
+
+const initialVoteFile = document.querySelector('#initialVoteFile');
+if (initialVoteFile) {
+  initialVoteFile.onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const status = document.querySelector('#initialImportStatus');
+    status.textContent = '正在导入初评结果…';
+    const response = await fetch('/api/import-initial-votes', {
+      method: 'POST',
+      headers: {'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},
+      body: file
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      status.textContent = data.error || '导入失败';
+      event.target.value = '';
+      return;
+    }
+    const errorText = data.errorCount ? '；有 ' + data.errorCount + ' 行未导入：' + (data.errors || []).join('；') : '';
+    status.textContent = '已导入 ' + data.imported + ' 条初评，Skip ' + data.skipped + ' 条' + errorText;
+    event.target.value = '';
+    await load();
+  };
+}
+
+load();
+function connect(){
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
+  ws.onmessage = event => { const message = JSON.parse(event.data); if (['results','employees'].includes(message.type)) load(); };
+  ws.onopen = () => $('#live').textContent = '数据实时更新';
+  ws.onclose = () => { $('#live').textContent = '正在重新连接'; setTimeout(connect, 1200); };
+}
+connect();
+</script>
+</body>
+</html>

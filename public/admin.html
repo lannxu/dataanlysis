@@ -6,100 +6,133 @@
   <title>人才盘点后台</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-<main class="shell admin-shell">
-  <div class="top">
+<body class="admin-stage-body">
+<main class="admin-stage-shell">
+  <header class="stage-topbar">
     <div>
       <div class="brand">人才盘点 · 主持后台</div>
       <div class="muted"><span class="status-dot"></span>手机端实时同步</div>
     </div>
-    <div class="actions">
-      <a class="btn secondary-link" href="/summary.html">查看当场总览</a>
-      <a class="btn" href="/api/export.csv">导出结果 CSV</a>
+    <div class="stage-actions">
+      <select id="employeePicker" aria-label="选择当前员工"></select>
+      <button class="secondary" id="prev">上一位</button>
+      <span class="count" id="progress">-- / --</span>
+      <span class="review-progress" id="reviewProgress">已评估 -- 人 · 未评估 -- 人</span>
+      <button id="next">下一位</button>
+      <a class="btn secondary-link" href="/home.html">讨论区首页</a>
+      <a class="btn secondary-link" href="/initial-results.html">初评结果</a>
+      <a class="btn secondary-link" href="/summary.html">当场总览</a>
+      <a class="btn" href="/api/export.csv">导出 CSV</a>
     </div>
-  </div>
+  </header>
 
-  <div class="grid admin-grid">
-    <section class="card qr">
+  <section class="stage-board">
+    <aside class="card stage-qr-card">
       <div class="section"><h2>扫码加入</h2></div>
       <img id="qr" alt="手机评估二维码">
-      <div class="qr-edit">
-        <input id="qrAddress" aria-label="手机访问地址">
-        <button id="refreshQr">重新生成</button>
-      </div>
       <a class="url" id="url" target="_blank"></a>
-      <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需连接同一 Wi-Fi，也可手动修改地址后重新生成。</div>
-      <hr style="border:0;border-top:1px solid #edf0f5;margin:20px 0">
-      <div class="person" style="padding:5px">
-        <div class="avatar" id="avatar">人</div>
-        <h1 id="name">--</h1>
-        <p id="meta">--</p>
-      </div>
-      <div class="controls">
-        <button class="secondary" id="prev">上一位</button>
-        <span class="count" id="progress">-- / --</span>
-        <button id="next">下一位</button>
-      </div>
+      <details class="qr-more">
+        <summary>修改二维码地址</summary>
+        <div class="qr-edit">
+          <input id="qrAddress" aria-label="手机访问地址">
+          <button id="refreshQr">重新生成</button>
+        </div>
+        <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需连接同一 Wi-Fi。</div>
+      </details>
+    </aside>
+
+    <section class="card stage-profile-card">
+      <div class="section"><h2>员工基本信息</h2></div>
+      <div id="stageProfile" class="stage-profile"></div>
     </section>
 
-    <section class="card current-review-card host-current-card">
-      <div class="section current-review-head">
+    <section class="card stage-nine-card">
+      <div class="stage-nine-head">
         <div>
-          <h2>当前员工初评结果</h2>
-          <span class="muted">左侧为员工基本信息，右侧为本轮投票落点分布</span>
+          <h2>九宫格初评落位</h2>
+          <p id="voteSummary">暂无投票</p>
         </div>
+        <div class="host-recommend" id="hostRecommend">系统建议：--</div>
       </div>
-      <div class="host-current-layout">
-        <div class="host-profile" id="hostProfile"></div>
-        <div class="host-ninebox-wrap">
-          <div class="host-ninebox-title">
-            <div>
-              <h3>九宫格初评分布</h3>
-              <p id="voteSummary">暂无投票</p>
-            </div>
-            <div class="host-recommend" id="hostRecommend">系统建议：--</div>
-          </div>
-          <div class="host-nine-grid" id="hostNineGrid"></div>
-          <div class="host-decision-bar" id="hostDecisionBar"></div>
-        </div>
-      </div>
+      <div class="stage-ninebox"><div class="axis-y">潜力 POT 高 → 低</div><div class="stage-nine-grid" id="hostNineGrid"></div><div class="axis-x">绩效 PL 低 → 高</div></div>
+      <div class="stage-decision" id="hostDecisionBar"></div>
     </section>
-  </div>
-
-  <div class="decision-grid">
-    <section class="card zone direct">
-      <div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div>
-      <div class="zone-list" id="directZone"><div class="empty">尚无人选</div></div>
-    </section>
-    <section class="card zone pending">
-      <div class="section"><h2>待定区</h2><span class="muted" id="pendingCount">0 人</span></div>
-      <div class="zone-list" id="pendingZone"><div class="empty">尚无人选</div></div>
-    </section>
-  </div>
-  <div id="decisionMsg" class="toast"></div>
-
-  <section class="card" style="margin-top:18px">
-    <div class="section">
-      <h2>员工名单</h2>
-      <span class="muted">文本区仅编辑基础四列；Excel 可在“照片”后自由增加字段</span>
-    </div>
-    <div class="upload-tools">
-      <a class="btn secondary-link" href="/employee-template.xlsx" download>下载 Excel 模板</a>
-      <label class="btn file-btn">上传 Excel 名单<input id="employeeFile" type="file" accept=".xlsx" hidden></label>
-      <span class="muted" id="uploadStatus">上传后先预览，不会自动覆盖</span>
-    </div>
-    <textarea class="employees" id="employees"></textarea>
-    <div style="margin-top:12px"><button id="save">确认并保存名单</button> <span class="muted" id="saved"></span></div>
   </section>
+
+  <div id="decisionMsg" class="toast stage-toast"></div>
+
+  <details class="card admin-tools-panel">
+    <summary>会前初评链接 / 初评结果 / 名单管理 / 上传 Excel / 查看落位区</summary>
+    <section class="pre-share-panel">
+      <div>
+        <h2>会前初评入口</h2>
+        <p class="muted">可以把这个二维码或链接提前发给评估人，评估人可自行逐个员工提交初评。</p>
+        <a class="url" id="preUrl" target="_blank"></a>
+        <div class="pre-share-actions"><a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a><a class="btn secondary-link" href="/initial-results.html">查看初评结果</a></div>
+      </div>
+      <img id="preQr" alt="会前初评二维码">
+    </section>
+    <div class="decision-grid compact-zones">
+      <section class="zone direct">
+        <div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div>
+        <div class="zone-list" id="directZone"><div class="empty">尚无人选</div></div>
+      </section>
+      <section class="zone pending">
+        <div class="section"><h2>待定区</h2><span class="muted" id="pendingCount">0 人</span></div>
+        <div class="zone-list" id="pendingZone"><div class="empty">尚无人选</div></div>
+      </section>
+      <section class="zone undiscussed">
+        <div class="section"><h2>未讨论区</h2><span class="muted" id="undiscussedCount">0 人</span></div>
+        <div class="zone-list" id="undiscussedZone"><div class="empty">尚无人选</div></div>
+      </section>
+    </div>
+    <section style="margin-top:16px">
+      <div class="section">
+        <h2>员工名单</h2>
+        <span class="muted">文本区仅编辑基础四列；Excel 可在“照片”后自由增加字段</span>
+      </div>
+      <div class="upload-tools">
+        <a class="btn secondary-link" href="/employee-template.xlsx" download>下载 Excel 模板</a>
+        <label class="btn file-btn">上传 Excel 名单<input id="employeeFile" type="file" accept=".xlsx" hidden></label>
+        <span class="muted" id="uploadStatus">上传后先预览，不会自动覆盖</span>
+      </div>
+      <textarea class="employees" id="employees"></textarea>
+      <div style="margin-top:12px"><button id="save">确认并保存名单</button> <span class="muted" id="saved"></span></div>
+    </section>
+  </details>
 </main>
 
 <script>
+const roomId = new URLSearchParams(location.search).get('room') || 'default';
+const roomSuffix = roomId && roomId !== 'default' ? '?room=' + encodeURIComponent(roomId) : '';
+const roomUrl = value => {
+  const u = new URL(value, location.href);
+  if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  return u.pathname + u.search + u.hash;
+};
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => nativeFetch(typeof input === 'string' && input.startsWith('/api/') ? roomUrl(input) : input, init);
+const wsRoomPath = roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : '';
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a[href^="/"]').forEach(link => {
+    const href = link.getAttribute('href') || '';
+    if (!href || href.includes('room=') || href.startsWith('/employee-template')) return;
+    const u = new URL(href, location.href);
+    if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
+    link.href = u.pathname + u.search + u.hash;
+  });
+});
+
 const $ = s => document.querySelector(s);
 const boxes = [1,2,3,4,5,6,7,8,9];
+const gridOrder = [6,3,1,8,5,2,9,7,4];
 let state = null;
 let resultRows = [];
 let uploadedPhotos = {};
 let uploadedFields = {};
+let noteSaveTimer = null;
+let noteSavingFor = null;
+
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function currentResult(){
@@ -125,47 +158,69 @@ function gridOptions(row){
 
 function voteSummaryText(row){
   const counts = row?.gridCounts || boxes.map(() => 0);
-  const parts = boxes.map((box, index) => ({box, count: counts[index] || 0})).filter(x => x.count > 0).sort((a,b) => b.count - a.count || a.box - b.box);
+  const parts = boxes.map((box, index) => ({box, count: counts[index] || 0}))
+    .filter(x => x.count > 0)
+    .sort((a,b) => b.count - a.count || a.box - b.box);
   if (!row?.count) return '暂无投票';
-  return row.count + '人投票，' + parts.map(x => x.count + '个在Box ' + x.box).join('，');
+  return row.count + '人投票，' + parts.map(x => x.count + '个在' + x.box + '宫').join('，');
+}
+
+function renderEmployeePicker(){
+  const picker = $('#employeePicker');
+  if (!state || !resultRows.length) {
+    picker.innerHTML = '<option>暂无员工</option>';
+    return;
+  }
+  picker.innerHTML = resultRows.map((row, index) => '<option value="' + index + '" ' + (index === state.currentIndex ? 'selected' : '') + '>' + (index + 1) + '. ' + esc(row.name) + '</option>').join('');
+}
+
+function renderReviewProgress(){
+  const total = resultRows.length || state?.total || 0;
+  const reviewed = resultRows.filter(row => Number(row.count || 0) > 0).length;
+  const unreviewed = Math.max(0, total - reviewed);
+  const el = $('#reviewProgress');
+  if (el) {
+    el.innerHTML = '<b>已评估 ' + reviewed + '</b><span>未评估 ' + unreviewed + '</span>';
+    el.title = '按是否已有投票判断：投票人数大于 0 算已评估';
+  }
 }
 
 function renderCurrentViews(){
   const row = currentResult();
   const e = state?.employee;
   if (!e || !row) {
-    $('#hostProfile').innerHTML = '<div class="empty">暂无当前员工</div>';
+    $('#stageProfile').innerHTML = '<div class="empty">暂无当前员工</div>';
     $('#hostNineGrid').innerHTML = '';
     $('#voteSummary').textContent = '暂无投票';
     $('#hostRecommend').textContent = '系统建议：--';
     $('#hostDecisionBar').innerHTML = '';
     return;
   }
-  const fields = Object.entries(e.fields || {});
-  $('#hostProfile').innerHTML =
-    '<div class="host-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
-    '<div class="muted">当前被评员工</div>' +
+  const fields = Object.entries(e.fields || {}).filter(([, value]) => String(value ?? '').trim());
+  const basicInfo = [
+    ['员工编号', e.id],
+    ['部门', e.department],
+    ['岗位', e.role]
+  ].filter(([, value]) => String(value ?? '').trim());
+  $('#stageProfile').innerHTML =
+    '<div class="stage-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
     '<h1>' + esc(e.name) + '</h1>' +
-    '<p>' + [e.department, e.role].filter(Boolean).map(esc).join(' · ') + '</p>' +
-    '<div class="host-facts">' +
-      '<div><span>投票人数</span><b>' + row.count + ' 人</b></div>' +
-      '<div><span>系统建议</span><b>' + esc(recommendationText(row)) + '</b></div>' +
-      '<div><span>讨论结果</span><b>' + esc(decisionText(row)) + '</b></div>' +
-    '</div>' +
-    (fields.length ? '<div class="host-fields">' + fields.map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '');
+    '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
+    (fields.length ? '<div class="stage-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
+    '<div class="discussion-note-panel"><label for="discussionNote">现场讨论记录</label><textarea id="discussionNote" class="discussion-note-box" placeholder="例如：下一个 position 是什么、继任方向、发展动作、风险点、待确认事项…">' + esc(row.discussionNote || '') + '</textarea><div class="discussion-note-status" id="noteStatus">自动保存</div></div>';
 
   const counts = row.gridCounts || boxes.map(() => 0);
   const max = Math.max(1, ...counts);
   $('#voteSummary').textContent = voteSummaryText(row);
   $('#hostRecommend').textContent = '系统建议：' + recommendationText(row);
-  $('#hostNineGrid').innerHTML = boxes.map((box, index) => {
-    const count = counts[index] || 0;
+  $('#hostNineGrid').innerHTML = gridOrder.map((box) => {
+    const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
-    return '<div class="host-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="host-box-top"><b>Box ' + box + '</b><span>' + count + '票</span></div>' +
-      '<div class="host-box-count">' + count + '</div>' +
-      '<div class="host-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
+    return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
+      '<div class="stage-box-top"><b>' + box + ' 宫</b><span>' + count + '票</span></div>' +
+      '<div class="stage-box-count">' + count + '</div>' +
+      '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
@@ -176,26 +231,79 @@ function renderCurrentViews(){
       '<button onclick="decideCurrent(\'direct\')">直接落位</button>' +
       '<button class="secondary" onclick="decideCurrent(\'pending\')">待定</button>' +
     '</div>';
+  wireDiscussionNote();
+}
+
+
+function wireDiscussionNote(){
+  const textarea = $('#discussionNote');
+  const status = $('#noteStatus');
+  const row = currentResult();
+  if (!textarea || !row) return;
+  noteSavingFor = row.id;
+  textarea.oninput = () => {
+    if (status) status.textContent = '正在输入…';
+    clearTimeout(noteSaveTimer);
+    const employeeId = row.id;
+    const note = textarea.value;
+    noteSaveTimer = setTimeout(() => saveDiscussionNote(employeeId, note), 700);
+  };
+}
+
+async function saveDiscussionNote(employeeId, note){
+  const status = $('#noteStatus');
+  if (status) status.textContent = '正在保存…';
+  const response = await fetch('/api/discussion-note', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({employeeId, note})
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    if (status) status.textContent = data.error || '保存失败';
+    return;
+  }
+  const row = resultRows.find(item => item.id === employeeId);
+  if (row) row.discussionNote = data.note || '';
+  if (status && noteSavingFor === employeeId) status.textContent = '已自动保存';
+}
+
+function employeeIndexById(employeeId){
+  return resultRows.findIndex(row => row.id === employeeId);
+}
+
+async function openEmployee(employeeId){
+  const index = employeeIndexById(employeeId);
+  if (index < 0) return;
+  const panel = document.querySelector('.admin-tools-panel');
+  if (panel) panel.open = false;
+  $('#decisionMsg').textContent = '已调出 ' + (resultRows[index]?.name || '该员工') + '，请在上方查看信息并做最终决定';
+  await go(index);
+}
+
+function zonePerson(row, statusText){
+  return '<button class="zone-person zone-person-click" type="button" onclick="openEmployee(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'))"><div><b>' + esc(row.name) + '</b><span>' + esc(row.department || row.role || '') + '</span></div><strong>' + statusText + '</strong></button>';
 }
 
 function renderZones(rows){
   const direct = rows.filter(r => r.decision?.type === 'direct');
   const pending = rows.filter(r => r.decision?.type === 'pending');
+  const undiscussed = rows.filter(r => !r.decision);
   $('#directCount').textContent = direct.length + ' 人';
   $('#pendingCount').textContent = pending.length + ' 人';
-  $('#directZone').innerHTML = direct.length ? direct.map(r => '<div class="zone-person"><div><b>' + esc(r.name) + '</b><span>' + esc(r.department) + '</span></div><strong>' + r.decision.grid + ' 宫</strong></div>').join('') : '<div class="empty">尚无人选</div>';
-  $('#pendingZone').innerHTML = pending.length ? pending.map(r => '<div class="zone-person"><div><b>' + esc(r.name) + '</b><span>' + esc(r.department) + '</span></div><strong>' + (r.recommendedGrid ? '推荐 ' + r.recommendedGrid + ' 宫' : '暂不推荐') + '</strong></div>').join('') : '<div class="empty">尚无人选</div>';
+  $('#undiscussedCount').textContent = undiscussed.length + ' 人';
+  $('#directZone').innerHTML = direct.length ? direct.map(r => zonePerson(r, r.decision.grid + ' 宫')).join('') : '<div class="empty">尚无人选</div>';
+  $('#pendingZone').innerHTML = pending.length ? pending.map(r => zonePerson(r, r.recommendedGrid ? '推荐 ' + r.recommendedGrid + ' 宫' : '暂不推荐')).join('') : '<div class="empty">尚无人选</div>';
+  $('#undiscussedZone').innerHTML = undiscussed.length ? undiscussed.map(r => zonePerson(r, r.count ? r.count + '票' : '未评估')).join('') : '<div class="empty">已全部讨论</div>';
 }
 
 async function loadState(){
   state = await fetch('/api/state').then(r => r.json());
-  const e = state.employee;
   $('#progress').textContent = (state.currentIndex + 1) + ' / ' + state.total;
-  $('#name').textContent = e?.name || '--';
-  $('#avatar').innerHTML = e?.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : (e?.name?.slice(-1) || '人');
-  $('#meta').textContent = [e?.department, e?.role].filter(Boolean).join(' · ') || '--';
   $('#prev').disabled = state.currentIndex <= 0;
   $('#next').disabled = state.currentIndex >= state.total - 1;
+  renderEmployeePicker();
+  renderReviewProgress();
   renderCurrentViews();
 }
 
@@ -204,6 +312,8 @@ async function loadResults(){
   uploadedPhotos = Object.fromEntries(resultRows.filter(r => r.photo).map(r => [r.id, r.photo]));
   uploadedFields = Object.fromEntries(resultRows.map(r => [r.id, r.fields || {}]));
   $('#employees').value = resultRows.map(r => [r.id, r.name, r.department, r.role].join(',')).join('\n');
+  renderEmployeePicker();
+  renderReviewProgress();
   renderZones(resultRows);
   renderCurrentViews();
 }
@@ -232,6 +342,7 @@ async function go(i){
 
 $('#prev').onclick = () => go(state.currentIndex - 1);
 $('#next').onclick = () => go(state.currentIndex + 1);
+$('#employeePicker').onchange = event => go(Number(event.target.value));
 
 $('#employeeFile').onchange = async event => {
   const file = event.target.files[0];
@@ -266,12 +377,25 @@ async function loadQr(custom = ''){
   $('#qr').src = q.svgUrl + '&v=' + Date.now();
 }
 
+async function loadPreQr(){
+  const q = await fetch('/api/qr').then(r => r.json());
+  const preUrl = new URL(q.url);
+  preUrl.pathname = '/pre.html';
+  preUrl.search = '';
+  preUrl.hash = '';
+  $('#preUrl').textContent = preUrl.toString();
+  $('#preUrl').href = preUrl.toString();
+  $('#preQr').src = '/api/qr.svg?url=' + encodeURIComponent(preUrl.toString()) + '&v=' + Date.now();
+}
+
 $('#refreshQr').onclick = () => loadQr($('#qrAddress').value.trim());
 loadQr();
+loadPreQr();
 loadState();
 loadResults();
+
 function connect(){
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host);
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
   ws.onmessage = event => {
     const message = JSON.parse(event.data);
     if (['state','current','employees'].includes(message.type)) loadState();

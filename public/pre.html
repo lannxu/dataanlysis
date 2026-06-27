@@ -1,0 +1,210 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人才盘点 · 会前初评</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell pre-shell">
+  <div class="top">
+    <div>
+      <div class="brand">人才盘点 · 会前初评</div>
+      <div class="muted"><span class="status-dot"></span>可以评估的人请打分；无需评估的人可直接 Skip</div>
+    </div>
+    <div class="muted" id="preProgress">-- / --</div>
+  </div>
+
+  <section class="card pre-card">
+    <div class="pre-toolbar">
+      <label>选择员工</label>
+      <select id="employeeSelect"></select>
+    </div>
+
+    <div class="person pre-person">
+      <div class="avatar" id="avatar">人</div>
+      <h1 id="name">正在加载</h1>
+      <p id="meta">--</p>
+      <div class="extra-fields" id="extraFields" hidden></div>
+    </div>
+
+    <div class="dimension">
+      <h2>绩效等级</h2>
+      <div class="options" id="pl"></div>
+    </div>
+    <div class="dimension">
+      <h2>潜力等级</h2>
+      <div class="options pot" id="pot"></div>
+    </div>
+
+    <div class="dimension"><h2>Comments / 备注</h2><textarea class="comment-box" id="comment" placeholder="可填写评估理由、观察到的优势/风险、需要讨论的问题等（选填）"></textarea></div>
+
+    <div class="pre-submit-row">
+      <button class="submit" id="submit" disabled>提交这位员工的初评</button>
+      <button class="secondary skip-btn" id="skipEmployee" type="button">Skip</button>
+    </div>
+    <p class="muted pre-skip-tip">Skip 不会计入 PL/POT 票数，也不会影响系统推荐；只是记录为你已处理过此人。</p>
+    <div class="pre-nav">
+      <button class="secondary" id="prevEmployee">上一位</button>
+      <button class="secondary" id="nextEmployee">下一位</button>
+    </div>
+    <div class="toast" id="toast"></div>
+  </section>
+</main>
+
+<script>
+const roomId = new URLSearchParams(location.search).get('room') || 'default';
+const roomUrl = value => {
+  const u = new URL(value, location.href);
+  if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  return u.pathname + u.search + u.hash;
+};
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => nativeFetch(typeof input === 'string' && input.startsWith('/api/') ? roomUrl(input) : input, init);
+
+const $ = s => document.querySelector(s);
+let employees = [];
+let currentIndex = 0;
+let current = null;
+let pl = 0;
+let pot = 0;
+const handled = new Set();
+
+function makeEvaluatorId(){
+  let saved = '';
+  try { saved = localStorage.getItem('preEvaluatorId') || localStorage.getItem('evaluatorId') || ''; } catch {}
+  if (saved) return saved;
+  const id = globalThis.crypto?.randomUUID ? crypto.randomUUID() : 'ev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  try { localStorage.setItem('preEvaluatorId', id); } catch {}
+  return id;
+}
+const evaluatorId = makeEvaluatorId();
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function renderFields(fields = {}){
+  const el = $('#extraFields');
+  const entries = Object.entries(fields).filter(([,value]) => String(value ?? '').trim());
+  el.innerHTML = entries.map(([label,value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('');
+  el.hidden = !entries.length;
+}
+
+function optionButtons(id, total, prefix){
+  const el = $(id);
+  el.innerHTML = '';
+  for (let i = 1; i <= total; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.type = 'button';
+    btn.textContent = prefix + i;
+    btn.onclick = () => {
+      if (id === '#pl') pl = i; else pot = i;
+      [...el.children].forEach((x, index) => x.classList.toggle('active', index === i - 1));
+      $('#submit').disabled = !(pl && pot && current);
+    };
+    el.appendChild(btn);
+  }
+}
+optionButtons('#pl', 5, 'PL');
+optionButtons('#pot', 3, 'POT');
+
+function updateProgress(){
+  const total = employees.length;
+  $('#preProgress').textContent = total ? (currentIndex + 1) + ' / ' + total + ' · 已处理 ' + handled.size : '-- / --';
+}
+
+async function loadMyVote(){
+  pl = 0;
+  pot = 0;
+  document.querySelectorAll('.choice').forEach(x => x.classList.remove('active'));
+  $('#submit').disabled = true;
+  $('#toast').textContent = '';
+  $('#comment').value = '';
+  if (!current) return;
+  const vote = await fetch('/api/my-vote?employeeId=' + encodeURIComponent(current.id) + '&evaluatorId=' + encodeURIComponent(evaluatorId), {cache:'no-store'}).then(r => r.json());
+  if (vote) {
+    handled.add(current.id);
+    if (vote.skip) {
+      $('#comment').value = vote.comment || '';
+      $('#toast').textContent = '已 Skip；如需要，也可以重新选择 PL/POT 后提交评估';
+    } else {
+      document.querySelectorAll('#pl .choice')[vote.pl - 1]?.click();
+      document.querySelectorAll('#pot .choice')[vote.pot - 1]?.click();
+      $('#comment').value = vote.comment || '';
+      $('#toast').textContent = '已提交过，可直接修改后再次提交';
+    }
+  }
+  updateProgress();
+}
+
+async function renderEmployee(index){
+  currentIndex = Math.max(0, Math.min(index, employees.length - 1));
+  current = employees[currentIndex] || null;
+  updateProgress();
+  $('#employeeSelect').value = String(currentIndex);
+  $('#prevEmployee').disabled = currentIndex <= 0;
+  $('#nextEmployee').disabled = currentIndex >= employees.length - 1;
+  if (!current) return;
+  $('#avatar').innerHTML = current.photo ? '<img src="' + current.photo + '" alt="' + esc(current.name) + '">' : esc((current.name || '人').slice(-1));
+  $('#name').textContent = current.name;
+  $('#meta').textContent = [current.department, current.role].filter(Boolean).join(' · ') || '--';
+  renderFields(current.fields || {});
+  await loadMyVote();
+}
+
+async function loadEmployees(){
+  employees = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
+  $('#employeeSelect').innerHTML = employees.map((e, index) => '<option value="' + index + '">' + (index + 1) + '. ' + esc(e.name) + '</option>').join('');
+  await renderEmployee(0);
+}
+
+function goNextOrStay(){
+  if (currentIndex < employees.length - 1) renderEmployee(currentIndex + 1);
+  else updateProgress();
+}
+
+$('#employeeSelect').onchange = event => renderEmployee(Number(event.target.value));
+$('#prevEmployee').onclick = () => renderEmployee(currentIndex - 1);
+$('#nextEmployee').onclick = () => renderEmployee(currentIndex + 1);
+$('#submit').onclick = async () => {
+  if (!current) return;
+  const response = await fetch('/api/vote', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({evaluatorId, employeeId: current.id, pl, pot, comment: $('#comment').value.trim()})
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    $('#toast').textContent = data.error || '提交失败';
+    return;
+  }
+  handled.add(current.id);
+  $('#toast').textContent = '✓ 已提交：' + current.name;
+  updateProgress();
+  setTimeout(goNextOrStay, 450);
+};
+$('#skipEmployee').onclick = async () => {
+  if (!current) return;
+  const response = await fetch('/api/vote', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({evaluatorId, employeeId: current.id, skip: true, comment: $('#comment').value.trim()})
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    $('#toast').textContent = data.error || 'Skip 失败';
+    return;
+  }
+  handled.add(current.id);
+  $('#toast').textContent = '已 Skip：' + current.name;
+  updateProgress();
+  setTimeout(goNextOrStay, 350);
+};
+
+loadEmployees().catch(() => {
+  $('#name').textContent = '无法连接后台';
+  $('#meta').textContent = '请稍后重试，或联系主持人';
+});
+</script>
+</body>
+</html>
