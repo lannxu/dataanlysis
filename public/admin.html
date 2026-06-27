@@ -1,3 +1,285 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>人才盘点后台</title><link rel="stylesheet" href="/styles.css"></head><body><main class="shell"><div class="top"><div><div class="brand">人才盘点 · 主持后台</div><div class="muted"><span class="status-dot"></span>手机端实时同步</div></div><div class="actions"><a class="btn secondary-link" href="/summary.html">查看当场总览</a><a class="btn" href="/api/export.csv">导出结果 CSV</a></div></div><div class="grid"><section class="card qr"><div class="section"><h2>扫码加入</h2></div><img id="qr" alt="手机评估二维码"><div class="qr-edit"><input id="qrAddress" aria-label="手机访问地址"><button id="refreshQr">重新生成</button></div><a class="url" id="url" target="_blank"></a><div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需连接同一 Wi-Fi，也可手动修改地址后重新生成。</div><hr style="border:0;border-top:1px solid #edf0f5;margin:20px 0"><div class="person" style="padding:5px"><div class="avatar" id="avatar">人</div><h1 id="name">--</h1><p id="meta">--</p></div><div class="controls"><button class="secondary" id="prev">上一位</button><span class="count" id="progress">-- / --</span><button id="next">下一位</button></div></section><section class="card"><div class="section"><h2>实时结果</h2><span class="muted">重复提交覆盖上次选择</span></div><div class="table-wrap"><table><thead><tr><th>员工姓名</th><th>绩效分布</th><th>潜力分布</th><th>系统推荐</th><th>讨论结论</th></tr></thead><tbody id="results"></tbody></table></div></section></div><div class="decision-grid"><section class="card zone direct"><div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div><div class="zone-list" id="directZone"><div class="empty">尚无人选</div></div></section><section class="card zone pending"><div class="section"><h2>待定区</h2><span class="muted" id="pendingCount">0 人</span></div><div class="zone-list" id="pendingZone"><div class="empty">尚无人选</div></div></section></div><div id="decisionMsg" class="toast"></div><section class="card" style="margin-top:18px"><div class="section"><h2>员工名单</h2><span class="muted">文本区仅编辑基础四列；Excel 可在“照片”后自由增加字段</span></div><div class="upload-tools"><a class="btn secondary-link" href="/employee-template.xlsx" download>下载 Excel 模板</a><label class="btn file-btn">上传 Excel 名单<input id="employeeFile" type="file" accept=".xlsx" hidden></label><span class="muted" id="uploadStatus">上传后先预览，不会自动覆盖</span></div><textarea class="employees" id="employees"></textarea><div style="margin-top:12px"><button id="save">确认并保存名单</button> <span class="muted" id="saved"></span></div></section></main><script>
-const $=s=>document.querySelector(s);let state=null,uploadedPhotos={},uploadedFields={};const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function recommendation(r){if(!r.recommendedGrid)return'暂不推荐';return`PL${r.majorityPL} · POT${r.majorityPOT}<br><b>九宫格 ${r.recommendedGrid}</b>`}function barChart(values,prefix){const max=Math.max(1,...values);return`<div class="mini-bars">${values.map((n,i)=>`<div class="bar-item"><span>${n}</span><div class="bar-track"><i style="height:${n?Math.max(8,n/max*100):0}%"></i></div><small>${prefix}${i+1}</small></div>`).join('')}</div>`}async function loadState(){state=await fetch('/api/state').then(r=>r.json());const e=state.employee;$('#progress').textContent=`${state.currentIndex+1} / ${state.total}`;$('#name').textContent=e?.name||'--';$('#avatar').innerHTML=e?.photo?`<img src="${e.photo}" alt="${esc(e.name)}">`:(e?.name?.slice(-1)||'人');$('#meta').textContent=[e?.department,e?.role].filter(Boolean).join(' · ')||'--';$('#prev').disabled=state.currentIndex<=0;$('#next').disabled=state.currentIndex>=state.total-1}async function loadResults(){const rows=await fetch('/api/results').then(r=>r.json());uploadedPhotos=Object.fromEntries(rows.filter(r=>r.photo).map(r=>[r.id,r.photo]));uploadedFields=Object.fromEntries(rows.map(r=>[r.id,r.fields||{}]));$('#results').innerHTML=rows.map(r=>`<tr><td class="result-name"><b>${esc(r.name)}</b></td><td>${barChart(r.plCounts,'PL')}</td><td>${barChart(r.potCounts,'POT')}</td><td><span class="recommend ${r.recommendedGrid?'':'no-recommend'}">${recommendation(r)}</span></td><td><div class="decision-controls"><select id="grid-${encodeURIComponent(r.id)}">${[1,2,3,4,5,6,7,8,9].map(n=>`<option value="${n}" ${n===(r.decision?.grid||r.recommendedGrid)?'selected':''}>${n}宫</option>`).join('')}</select><button onclick="decide(decodeURIComponent('${encodeURIComponent(r.id)}'),'direct')">直接落位</button><button class="secondary" onclick="decide(decodeURIComponent('${encodeURIComponent(r.id)}'),'pending')">待定</button></div></td></tr>`).join('');renderZones(rows);$('#employees').value=rows.map(r=>[r.id,r.name,r.department,r.role].join(',')).join('\n')}function renderZones(rows){const direct=rows.filter(r=>r.decision?.type==='direct'),pending=rows.filter(r=>r.decision?.type==='pending');$('#directCount').textContent=`${direct.length} 人`;$('#pendingCount').textContent=`${pending.length} 人`;$('#directZone').innerHTML=direct.length?direct.map(r=>`<div class="zone-person"><div><b>${esc(r.name)}</b><span>${esc(r.department)}</span></div><strong>${r.decision.grid} 宫</strong></div>`).join(''):'<div class="empty">尚无人选</div>';$('#pendingZone').innerHTML=pending.length?pending.map(r=>`<div class="zone-person"><div><b>${esc(r.name)}</b><span>${esc(r.department)}</span></div><strong>${r.recommendedGrid?`推荐 ${r.recommendedGrid} 宫`:'暂不推荐'}</strong></div>`).join(''):'<div class="empty">尚无人选</div>'}async function decide(employeeId,type){const select=document.getElementById(`grid-${encodeURIComponent(employeeId)}`),grid=Number(select?.value);const response=await fetch('/api/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employeeId,type,grid})});const data=await response.json();$('#decisionMsg').textContent=response.ok?(type==='direct'?'已放入直接落位区':'已放入待定区'):data.error}async function go(i){await fetch('/api/current',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i})})}$('#prev').onclick=()=>go(state.currentIndex-1);$('#next').onclick=()=>go(state.currentIndex+1);$('#employeeFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;$('#uploadStatus').textContent='正在读取名单…';const response=await fetch('/api/import-employees',{method:'POST',headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},body:file});const data=await response.json();if(!response.ok){$('#uploadStatus').textContent=data.error;return}uploadedPhotos=Object.fromEntries(data.employees.filter(e=>e.photo).map(e=>[e.id,e.photo]));uploadedFields=Object.fromEntries(data.employees.map(e=>[e.id,e.fields||{}]));$('#employees').value=data.employees.map(e=>[e.id,e.name,e.department,e.role].join(',')).join('\n');$('#uploadStatus').textContent=`已读取 ${data.count} 人，其中 ${data.photoCount} 人有照片、${data.fieldCount} 个自定义字段；请核对后点击“确认并保存名单”`;event.target.value=''};$('#save').onclick=async()=>{const employees=$('#employees').value.split(/\r?\n/).filter(Boolean).map(line=>{const[id,name,department,role]=line.split(/[,，\t]/).map(x=>x.trim());return{id,name,department,role,photo:uploadedPhotos[id]||'',fields:uploadedFields[id]||{}}});const r=await fetch('/api/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employees})});const d=await r.json();$('#saved').textContent=r.ok?`已保存 ${d.total} 人`:d.error;if(r.ok)loadResults()};async function loadQr(custom=''){const q=await fetch(`/api/qr${custom?`?url=${encodeURIComponent(custom)}`:''}`).then(r=>r.json());$('#qrAddress').value=q.url;$('#url').textContent=q.url;$('#url').href=q.url;$('#qr').src=`${q.svgUrl}&v=${Date.now()}`}$('#refreshQr').onclick=()=>loadQr($('#qrAddress').value.trim());loadQr();loadState();loadResults();function connect(){const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(['state','current','employees'].includes(m.type))loadState();if(['results','employees'].includes(m.type))loadResults()};ws.onclose=()=>setTimeout(connect,1200)}connect();
-</script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人才盘点后台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell admin-shell">
+  <div class="top">
+    <div>
+      <div class="brand">人才盘点 · 主持后台</div>
+      <div class="muted"><span class="status-dot"></span>手机端实时同步</div>
+    </div>
+    <div class="actions">
+      <a class="btn secondary-link" href="/summary.html">查看当场总览</a>
+      <a class="btn" href="/api/export.csv">导出结果 CSV</a>
+    </div>
+  </div>
+
+  <div class="grid admin-grid">
+    <section class="card qr">
+      <div class="section"><h2>扫码加入</h2></div>
+      <img id="qr" alt="手机评估二维码">
+      <div class="qr-edit">
+        <input id="qrAddress" aria-label="手机访问地址">
+        <button id="refreshQr">重新生成</button>
+      </div>
+      <a class="url" id="url" target="_blank"></a>
+      <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需连接同一 Wi-Fi，也可手动修改地址后重新生成。</div>
+      <hr style="border:0;border-top:1px solid #edf0f5;margin:20px 0">
+      <div class="person" style="padding:5px">
+        <div class="avatar" id="avatar">人</div>
+        <h1 id="name">--</h1>
+        <p id="meta">--</p>
+      </div>
+      <div class="controls">
+        <button class="secondary" id="prev">上一位</button>
+        <span class="count" id="progress">-- / --</span>
+        <button id="next">下一位</button>
+      </div>
+    </section>
+
+    <section class="card current-review-card host-current-card">
+      <div class="section current-review-head">
+        <div>
+          <h2>当前员工初评结果</h2>
+          <span class="muted">左侧为员工基本信息，右侧为本轮投票落点分布</span>
+        </div>
+      </div>
+      <div class="host-current-layout">
+        <div class="host-profile" id="hostProfile"></div>
+        <div class="host-ninebox-wrap">
+          <div class="host-ninebox-title">
+            <div>
+              <h3>九宫格初评分布</h3>
+              <p id="voteSummary">暂无投票</p>
+            </div>
+            <div class="host-recommend" id="hostRecommend">系统建议：--</div>
+          </div>
+          <div class="host-nine-grid" id="hostNineGrid"></div>
+          <div class="host-decision-bar" id="hostDecisionBar"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="decision-grid">
+    <section class="card zone direct">
+      <div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div>
+      <div class="zone-list" id="directZone"><div class="empty">尚无人选</div></div>
+    </section>
+    <section class="card zone pending">
+      <div class="section"><h2>待定区</h2><span class="muted" id="pendingCount">0 人</span></div>
+      <div class="zone-list" id="pendingZone"><div class="empty">尚无人选</div></div>
+    </section>
+  </div>
+  <div id="decisionMsg" class="toast"></div>
+
+  <section class="card" style="margin-top:18px">
+    <div class="section">
+      <h2>员工名单</h2>
+      <span class="muted">文本区仅编辑基础四列；Excel 可在“照片”后自由增加字段</span>
+    </div>
+    <div class="upload-tools">
+      <a class="btn secondary-link" href="/employee-template.xlsx" download>下载 Excel 模板</a>
+      <label class="btn file-btn">上传 Excel 名单<input id="employeeFile" type="file" accept=".xlsx" hidden></label>
+      <span class="muted" id="uploadStatus">上传后先预览，不会自动覆盖</span>
+    </div>
+    <textarea class="employees" id="employees"></textarea>
+    <div style="margin-top:12px"><button id="save">确认并保存名单</button> <span class="muted" id="saved"></span></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const boxes = [1,2,3,4,5,6,7,8,9];
+let state = null;
+let resultRows = [];
+let uploadedPhotos = {};
+let uploadedFields = {};
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function currentResult(){
+  const id = state?.employee?.id;
+  return resultRows.find(row => row.id === id) || null;
+}
+
+function decisionText(row){
+  if (!row?.decision) return '尚未讨论';
+  if (row.decision.type === 'pending') return '待定';
+  return '直接落位 · ' + row.decision.grid + ' 宫';
+}
+
+function recommendationText(row){
+  if (!row?.recommendedGrid) return '暂不推荐';
+  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + ' · 建议 ' + row.recommendedGrid + ' 宫';
+}
+
+function gridOptions(row){
+  const selected = row?.decision?.grid || row?.recommendedGrid || 5;
+  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>' + n + '宫</option>').join('');
+}
+
+function voteSummaryText(row){
+  const counts = row?.gridCounts || boxes.map(() => 0);
+  const parts = boxes.map((box, index) => ({box, count: counts[index] || 0})).filter(x => x.count > 0).sort((a,b) => b.count - a.count || a.box - b.box);
+  if (!row?.count) return '暂无投票';
+  return row.count + '人投票，' + parts.map(x => x.count + '个在Box ' + x.box).join('，');
+}
+
+function renderCurrentViews(){
+  const row = currentResult();
+  const e = state?.employee;
+  if (!e || !row) {
+    $('#hostProfile').innerHTML = '<div class="empty">暂无当前员工</div>';
+    $('#hostNineGrid').innerHTML = '';
+    $('#voteSummary').textContent = '暂无投票';
+    $('#hostRecommend').textContent = '系统建议：--';
+    $('#hostDecisionBar').innerHTML = '';
+    return;
+  }
+  const fields = Object.entries(e.fields || {});
+  $('#hostProfile').innerHTML =
+    '<div class="host-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
+    '<div class="muted">当前被评员工</div>' +
+    '<h1>' + esc(e.name) + '</h1>' +
+    '<p>' + [e.department, e.role].filter(Boolean).map(esc).join(' · ') + '</p>' +
+    '<div class="host-facts">' +
+      '<div><span>投票人数</span><b>' + row.count + ' 人</b></div>' +
+      '<div><span>系统建议</span><b>' + esc(recommendationText(row)) + '</b></div>' +
+      '<div><span>讨论结果</span><b>' + esc(decisionText(row)) + '</b></div>' +
+    '</div>' +
+    (fields.length ? '<div class="host-fields">' + fields.map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '');
+
+  const counts = row.gridCounts || boxes.map(() => 0);
+  const max = Math.max(1, ...counts);
+  $('#voteSummary').textContent = voteSummaryText(row);
+  $('#hostRecommend').textContent = '系统建议：' + recommendationText(row);
+  $('#hostNineGrid').innerHTML = boxes.map((box, index) => {
+    const count = counts[index] || 0;
+    const isRecommend = row.recommendedGrid === box;
+    const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
+    return '<div class="host-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
+      '<div class="host-box-top"><b>Box ' + box + '</b><span>' + count + '票</span></div>' +
+      '<div class="host-box-count">' + count + '</div>' +
+      '<div class="host-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
+      '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
+    '</div>';
+  }).join('');
+  $('#hostDecisionBar').innerHTML =
+    '<div><span>讨论结果</span><b>' + esc(decisionText(row)) + '</b></div>' +
+    '<div class="decision-controls current-decision">' +
+      '<select id="currentGridSelect">' + gridOptions(row) + '</select>' +
+      '<button onclick="decideCurrent(\'direct\')">直接落位</button>' +
+      '<button class="secondary" onclick="decideCurrent(\'pending\')">待定</button>' +
+    '</div>';
+}
+
+function renderZones(rows){
+  const direct = rows.filter(r => r.decision?.type === 'direct');
+  const pending = rows.filter(r => r.decision?.type === 'pending');
+  $('#directCount').textContent = direct.length + ' 人';
+  $('#pendingCount').textContent = pending.length + ' 人';
+  $('#directZone').innerHTML = direct.length ? direct.map(r => '<div class="zone-person"><div><b>' + esc(r.name) + '</b><span>' + esc(r.department) + '</span></div><strong>' + r.decision.grid + ' 宫</strong></div>').join('') : '<div class="empty">尚无人选</div>';
+  $('#pendingZone').innerHTML = pending.length ? pending.map(r => '<div class="zone-person"><div><b>' + esc(r.name) + '</b><span>' + esc(r.department) + '</span></div><strong>' + (r.recommendedGrid ? '推荐 ' + r.recommendedGrid + ' 宫' : '暂不推荐') + '</strong></div>').join('') : '<div class="empty">尚无人选</div>';
+}
+
+async function loadState(){
+  state = await fetch('/api/state').then(r => r.json());
+  const e = state.employee;
+  $('#progress').textContent = (state.currentIndex + 1) + ' / ' + state.total;
+  $('#name').textContent = e?.name || '--';
+  $('#avatar').innerHTML = e?.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : (e?.name?.slice(-1) || '人');
+  $('#meta').textContent = [e?.department, e?.role].filter(Boolean).join(' · ') || '--';
+  $('#prev').disabled = state.currentIndex <= 0;
+  $('#next').disabled = state.currentIndex >= state.total - 1;
+  renderCurrentViews();
+}
+
+async function loadResults(){
+  resultRows = await fetch('/api/results').then(r => r.json());
+  uploadedPhotos = Object.fromEntries(resultRows.filter(r => r.photo).map(r => [r.id, r.photo]));
+  uploadedFields = Object.fromEntries(resultRows.map(r => [r.id, r.fields || {}]));
+  $('#employees').value = resultRows.map(r => [r.id, r.name, r.department, r.role].join(',')).join('\n');
+  renderZones(resultRows);
+  renderCurrentViews();
+}
+
+async function decide(employeeId, type, grid){
+  const response = await fetch('/api/decision', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({employeeId, type, grid})
+  });
+  const data = await response.json();
+  $('#decisionMsg').textContent = response.ok ? (type === 'direct' ? '已放入直接落位区' : '已放入待定区') : data.error;
+  if (response.ok) loadResults();
+}
+
+function decideCurrent(type){
+  const row = currentResult();
+  if (!row) return;
+  const grid = Number($('#currentGridSelect')?.value || row.recommendedGrid || 5);
+  decide(row.id, type, grid);
+}
+
+async function go(i){
+  await fetch('/api/current', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({index:i})});
+}
+
+$('#prev').onclick = () => go(state.currentIndex - 1);
+$('#next').onclick = () => go(state.currentIndex + 1);
+
+$('#employeeFile').onchange = async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  $('#uploadStatus').textContent = '正在读取名单…';
+  const response = await fetch('/api/import-employees', {method:'POST', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:file});
+  const data = await response.json();
+  if (!response.ok) { $('#uploadStatus').textContent = data.error; return; }
+  uploadedPhotos = Object.fromEntries(data.employees.filter(e => e.photo).map(e => [e.id, e.photo]));
+  uploadedFields = Object.fromEntries(data.employees.map(e => [e.id, e.fields || {}]));
+  $('#employees').value = data.employees.map(e => [e.id, e.name, e.department, e.role].join(',')).join('\n');
+  $('#uploadStatus').textContent = '已读取 ' + data.count + ' 人，其中 ' + data.photoCount + ' 人有照片、' + data.fieldCount + ' 个自定义字段；请核对后点击“确认并保存名单”';
+  event.target.value = '';
+};
+
+$('#save').onclick = async () => {
+  const employees = $('#employees').value.split(/\r?\n/).filter(Boolean).map(line => {
+    const [id, name, department, role] = line.split(/[,，\t]/).map(x => x.trim());
+    return {id, name, department, role, photo: uploadedPhotos[id] || '', fields: uploadedFields[id] || {}};
+  });
+  const r = await fetch('/api/employees', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({employees})});
+  const d = await r.json();
+  $('#saved').textContent = r.ok ? '已保存 ' + d.total + ' 人' : d.error;
+  if (r.ok) loadResults();
+};
+
+async function loadQr(custom = ''){
+  const q = await fetch('/api/qr' + (custom ? '?url=' + encodeURIComponent(custom) : '')).then(r => r.json());
+  $('#qrAddress').value = q.url;
+  $('#url').textContent = q.url;
+  $('#url').href = q.url;
+  $('#qr').src = q.svgUrl + '&v=' + Date.now();
+}
+
+$('#refreshQr').onclick = () => loadQr($('#qrAddress').value.trim());
+loadQr();
+loadState();
+loadResults();
+function connect(){
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host);
+  ws.onmessage = event => {
+    const message = JSON.parse(event.data);
+    if (['state','current','employees'].includes(message.type)) loadState();
+    if (['results','employees'].includes(message.type)) loadResults();
+  };
+  ws.onclose = () => setTimeout(connect, 1200);
+}
+connect();
+</script>
+</body>
+</html>
