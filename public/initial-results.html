@@ -36,7 +36,7 @@
   <section class="card initial-filter-card">
     <div>
       <h2>初评结果查看方式</h2>
-      <p class="muted">可以按岗位级别看一群人的整体落位，也可以点击单个员工，看这个人的初评九宫格分布。</p>
+      <p class="muted">可以按岗位级别看一群人的整体落位，也可以点击单个员工，看这个人的初评 9-Box 分布。</p>
     </div>
     <div class="initial-filter-controls initial-mode-controls">
       <button class="active" id="modeGroup" type="button">岗位级别总览</button>
@@ -58,7 +58,7 @@
   <section class="card initial-person-toolbar" id="personToolbar" hidden>
     <div>
       <h2>逐个查看员工初评</h2>
-      <p class="muted">选择员工后，右侧九宫格会显示评委初评票数分布，和主持后台当前员工视图一致。</p>
+      <p class="muted">选择员工后，右侧 9-Box 会显示评委初评票数分布，和主持后台当前员工视图一致。</p>
     </div>
     <div class="initial-person-controls">
       <select id="personPicker"></select>
@@ -73,15 +73,15 @@
     <section class="card" style="margin-top:18px">
       <div class="section">
         <div>
-          <h2>筛选后的九宫格初评结果</h2>
+          <h2>筛选后的 9-Box 初评结果</h2>
           <span class="muted" id="filterHint">全部员工</span>
         </div>
-        <span class="muted" id="moveStatus">可拖动姓名到其他宫格；触屏设备可点击姓名调整</span>
+        <span class="muted" id="moveStatus">可拖动姓名到其他 Box；触屏设备可点击姓名调整</span>
       </div>
       <div class="ninebox initial-ninebox">
-        <div class="axis-y">潜力 POT 高 → 低</div>
+        <div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div>
         <div class="nine-grid" id="nineGrid"></div>
-        <div class="axis-x">绩效 PL 低 → 高</div>
+        <div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div>
       </div>
     </section>
 
@@ -102,15 +102,15 @@
       <section class="card stage-nine-card initial-person-nine-card">
         <div class="stage-nine-head">
           <div>
-            <h2>九宫格初评落位</h2>
+            <h2>9-Box 初评落位</h2>
             <p id="personVoteSummary">暂无投票</p>
           </div>
           <div class="host-recommend" id="personRecommend">系统建议：--</div>
         </div>
         <div class="stage-ninebox">
-          <div class="axis-y">潜力 POT 高 → 低</div>
+          <div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div>
           <div class="stage-nine-grid" id="personNineGrid"></div>
-          <div class="axis-x">绩效 PL 低 → 高</div>
+          <div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div>
         </div>
         <div class="stage-decision" id="personDecisionBar"></div>
       </section>
@@ -140,6 +140,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 const $ = s => document.querySelector(s);
+const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const boxes = [1,2,3,4,5,6,7,8,9];
 const gridOrder = [6,3,1,8,5,2,9,7,4];
@@ -161,23 +162,69 @@ function placementGrid(row){
 
 function recommendation(row){
   if (!row.recommendedGrid) return '暂不推荐';
-  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + '<br><b>' + row.recommendedGrid + ' 宫</b>';
+  return 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>'; 
 }
 
 function recommendationText(row){
   if (!row?.recommendedGrid) return '暂不推荐';
-  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + ' · 建议 ' + row.recommendedGrid + ' 宫';
+  return '建议 Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
 }
 
 function placementText(row){
   const grid = placementGrid(row);
   if (!grid) return row.decision?.type === 'pending' ? '待定' : '暂未落位';
   const source = row.decision?.type === 'direct' ? '已调整' : '系统推荐';
-  return source + ' · ' + grid + ' 宫';
+  return source + ' · Box ' + grid;
 }
 
 function boxDistribution(row){
-  return (row.gridCounts || []).map((count, index) => count ? 'Box ' + (index + 1) + '：' + count : '').filter(Boolean).join('；') || '暂无投票';
+  return (row.gridCounts || []).map((count, index) => count ? 'Box ' + (index + 1) + '：' + count + '（' + pct(count, row.count) + '）' : '').filter(Boolean).join('；') || '暂无投票';
+}
+
+
+const plGroupLabels = ['PL 1-2','PL3','PL 4-5'];
+const potGroupLabels = ['POT1','POT2','POT3'];
+function groupCounts(row, type){
+  if (type === 'pl') return row.plGroupCounts || [(row.plCounts?.[0] || 0) + (row.plCounts?.[1] || 0), row.plCounts?.[2] || 0, (row.plCounts?.[3] || 0) + (row.plCounts?.[4] || 0)];
+  return row.potGroupCounts || [row.potCounts?.[0] || 0, row.potCounts?.[1] || 0, row.potCounts?.[2] || 0];
+}
+function dimensionSummaryHtml(row){
+  const rows = [
+    ['绩效', plGroupLabels, groupCounts(row, 'pl')],
+    ['潜力', potGroupLabels, groupCounts(row, 'pot')]
+  ];
+  return '<div class="dimension-summary">' + rows.map(([title, labels, counts]) =>
+    '<div class="dimension-summary-row"><b>' + title + '</b>' + labels.map((label, index) => {
+      const count = counts[index] || 0;
+      return '<span><em>' + label + '</em><strong>' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
+    }).join('') + '</div>'
+  ).join('') + '</div>';
+}
+
+
+function updateVoteAxisBands(scope, row){
+  const root = typeof scope === 'string' ? document.querySelector(scope) : scope;
+  if (!root || !row) return;
+  const pl = groupCounts(row, 'pl');
+  const pot = groupCounts(row, 'pot');
+  const x = root.querySelectorAll('.axis-x-bands span');
+  const y = root.querySelectorAll('.axis-y-bands span');
+  const xLabels = ['PL1-2','PL3','PL4-5'];
+  const yLabels = ['POT3','POT2','POT1'];
+  x.forEach((el,index) => el.textContent = xLabels[index] + ' ' + pct(pl[index] || 0, row.count));
+  y.forEach((el,index) => { const sourceIndex = [2,1,0][index]; el.textContent = yLabels[index] + ' ' + pct(pot[sourceIndex] || 0, row.count); });
+}
+function updatePlacementAxisBands(scope, list){
+  const root = typeof scope === 'string' ? document.querySelector(scope) : scope;
+  if (!root) return;
+  const boxes = list.map(placementGrid).filter(Boolean);
+  const total = list.length;
+  const plCounts = [boxes.filter(box => [6,8,9].includes(box)).length, boxes.filter(box => [3,5,7].includes(box)).length, boxes.filter(box => [1,2,4].includes(box)).length];
+  const potCounts = [boxes.filter(box => [9,7,4].includes(box)).length, boxes.filter(box => [8,5,2].includes(box)).length, boxes.filter(box => [6,3,1].includes(box)).length];
+  const xLabels = ['PL1-2','PL3','PL4-5'];
+  const yLabels = ['POT3','POT2','POT1'];
+  root.querySelectorAll('.axis-x-bands span').forEach((el,index) => el.textContent = xLabels[index] + ' ' + pct(plCounts[index], total));
+  root.querySelectorAll('.axis-y-bands span').forEach((el,index) => { const sourceIndex = [2,1,0][index]; el.textContent = yLabels[index] + ' ' + pct(potCounts[sourceIndex], total); });
 }
 
 function voteSummaryText(row){
@@ -186,7 +233,7 @@ function voteSummaryText(row){
     .filter(x => x.count > 0)
     .sort((a,b) => b.count - a.count || a.box - b.box);
   if (!row?.count) return '暂无投票';
-  return row.count + '人投票，' + parts.map(x => x.count + '个在Box ' + x.box).join('，');
+  return row.count + '人投票，' + parts.map(x => x.count + '个在 Box ' + x.box + '（' + pct(x.count, row.count) + '）').join('，');
 }
 
 function filteredRows(){
@@ -236,7 +283,7 @@ async function moveEmployee(employeeId, grid){
     $('#moveStatus').textContent = data.error || '调整失败';
     return;
   }
-  $('#moveStatus').textContent = '已调整到 ' + grid + ' 宫';
+  $('#moveStatus').textContent = '已调整到 Box ' + grid;
   await load();
 }
 
@@ -247,11 +294,11 @@ function dropTo(event, grid){
 }
 
 function chooseGrid(employeeId, current){
-  const value = window.prompt('请输入目标宫格（1-9）', String(current || 5));
+  const value = window.prompt('请输入目标 Box（1-9）', String(current || 5));
   if (value === null) return;
   const grid = Number(value);
   if (!Number.isInteger(grid) || grid < 1 || grid > 9) {
-    $('#moveStatus').textContent = '请输入 1-9 的宫格编号';
+    $('#moveStatus').textContent = '请输入 1-9 的 Box 编号';
     return;
   }
   moveEmployee(employeeId, grid);
@@ -269,7 +316,7 @@ async function decide(employeeId, type, grid){
 
 function gridOptions(row){
   const selected = row?.decision?.grid || row?.recommendedGrid || 5;
-  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>' + n + '宫</option>').join('');
+  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>Box ' + n + '</option>').join('');
 }
 
 function renderGroup(){
@@ -290,10 +337,11 @@ function renderGroup(){
     ['待定', pending.length, '人']
   ];
   $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
+  updatePlacementAxisBands('.initial-ninebox', list);
   $('#nineGrid').innerHTML = gridOrder.map(box => {
     const members = list.filter(row => placementGrid(row) === box);
-    return '<div class="nine-cell cell-' + box + '" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>' + box + ' 宫</b><span>' + members.length + ' 人</span></div><div class="cell-people initial-draggable-people">' +
-      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整宫格；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
+    return '<div class="nine-cell cell-' + box + '" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people initial-draggable-people">' +
+      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整 Box；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
       '</div></div>';
   }).join('');
   $('#detail').innerHTML = list.map(row => '<tr>' +
@@ -326,6 +374,7 @@ function renderPerson(){
     $('#personNineGrid').innerHTML = '';
     $('#personVoteSummary').textContent = '暂无投票';
     $('#personRecommend').textContent = '系统建议：--';
+    updateVoteAxisBands('.initial-person-nine-card', {count:0, plCounts:[0,0,0,0,0], potCounts:[0,0,0]});
     $('#personDecisionBar').innerHTML = '';
     return;
   }
@@ -348,12 +397,13 @@ function renderPerson(){
   const max = Math.max(1, ...counts);
   $('#personVoteSummary').textContent = voteSummaryText(row);
   $('#personRecommend').textContent = '系统建议：' + recommendationText(row);
+  updateVoteAxisBands('.initial-person-nine-card', row);
   $('#personNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>' + box + ' 宫</b><span>' + count + '票</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + '票 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +

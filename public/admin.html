@@ -49,12 +49,12 @@
     <section class="card stage-nine-card">
       <div class="stage-nine-head">
         <div>
-          <h2>九宫格初评落位</h2>
+          <h2>9-Box 初评落位</h2>
           <p id="voteSummary">暂无投票</p>
         </div>
         <div class="host-recommend" id="hostRecommend">系统建议：--</div>
       </div>
-      <div class="stage-ninebox"><div class="axis-y">潜力 POT 高 → 低</div><div class="stage-nine-grid" id="hostNineGrid"></div><div class="axis-x">绩效 PL 低 → 高</div></div>
+      <div class="stage-ninebox"><div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div><div class="stage-nine-grid" id="hostNineGrid"></div><div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div></div>
       <div class="stage-decision" id="hostDecisionBar"></div>
     </section>
   </section>
@@ -132,7 +132,19 @@ let uploadedPhotos = {};
 let uploadedFields = {};
 let noteSaveTimer = null;
 let noteSavingFor = null;
+const discussionNoteFields = [
+  ['strength','Strength'],
+  ['improvementArea','Improvement Area'],
+  ['nextStep','Next Step'],
+  ['developmentMeasures','Development Measures'],
+  ['riskOfLeaving','Risk of Leaving']
+];
+function normalizeDiscussionNote(note){
+  if (note && typeof note === 'object') return Object.fromEntries(discussionNoteFields.map(([key]) => [key, note[key] || '']));
+  return {strength: note || '', improvementArea:'', nextStep:'', developmentMeasures:'', riskOfLeaving:''};
+}
 
+const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function currentResult(){
@@ -143,17 +155,51 @@ function currentResult(){
 function decisionText(row){
   if (!row?.decision) return '尚未讨论';
   if (row.decision.type === 'pending') return '待定';
-  return '直接落位 · ' + row.decision.grid + ' 宫';
+  return '直接落位 · ' + 'Box ' + row.decision.grid;
 }
 
 function recommendationText(row){
   if (!row?.recommendedGrid) return '暂不推荐';
-  return 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + ' · 建议 ' + row.recommendedGrid + ' 宫';
+  return '建议 Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
 }
 
 function gridOptions(row){
   const selected = row?.decision?.grid || row?.recommendedGrid || 5;
-  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>' + n + '宫</option>').join('');
+  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>Box ' + n + '</option>').join('');
+}
+
+
+const plGroupLabels = ['PL 1-2','PL3','PL 4-5'];
+const potGroupLabels = ['POT1','POT2','POT3'];
+function groupCounts(row, type){
+  if (type === 'pl') return row.plGroupCounts || [(row.plCounts?.[0] || 0) + (row.plCounts?.[1] || 0), row.plCounts?.[2] || 0, (row.plCounts?.[3] || 0) + (row.plCounts?.[4] || 0)];
+  return row.potGroupCounts || [row.potCounts?.[0] || 0, row.potCounts?.[1] || 0, row.potCounts?.[2] || 0];
+}
+function dimensionSummaryHtml(row){
+  const rows = [
+    ['绩效', plGroupLabels, groupCounts(row, 'pl')],
+    ['潜力', potGroupLabels, groupCounts(row, 'pot')]
+  ];
+  return '<div class="dimension-summary">' + rows.map(([title, labels, counts]) =>
+    '<div class="dimension-summary-row"><b>' + title + '</b>' + labels.map((label, index) => {
+      const count = counts[index] || 0;
+      return '<span><em>' + label + '</em><strong>' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
+    }).join('') + '</div>'
+  ).join('') + '</div>';
+}
+
+
+function updateVoteAxisBands(scope, row){
+  const root = typeof scope === 'string' ? document.querySelector(scope) : scope;
+  if (!root || !row) return;
+  const pl = groupCounts(row, 'pl');
+  const pot = groupCounts(row, 'pot');
+  const x = root.querySelectorAll('.axis-x-bands span');
+  const y = root.querySelectorAll('.axis-y-bands span');
+  const xLabels = ['PL1-2','PL3','PL4-5'];
+  const yLabels = ['POT3','POT2','POT1'];
+  x.forEach((el,index) => el.textContent = xLabels[index] + ' ' + pct(pl[index] || 0, row.count));
+  y.forEach((el,index) => { const sourceIndex = [2,1,0][index]; el.textContent = yLabels[index] + ' ' + pct(pot[sourceIndex] || 0, row.count); });
 }
 
 function voteSummaryText(row){
@@ -162,7 +208,7 @@ function voteSummaryText(row){
     .filter(x => x.count > 0)
     .sort((a,b) => b.count - a.count || a.box - b.box);
   if (!row?.count) return '暂无投票';
-  return row.count + '人投票，' + parts.map(x => x.count + '个在' + x.box + '宫').join('，');
+  return row.count + '人投票，' + parts.map(x => x.count + '个在 Box ' + x.box).join('，');
 }
 
 function renderEmployeePicker(){
@@ -193,6 +239,7 @@ function renderCurrentViews(){
     $('#hostNineGrid').innerHTML = '';
     $('#voteSummary').textContent = '暂无投票';
     $('#hostRecommend').textContent = '系统建议：--';
+    updateVoteAxisBands('.stage-nine-card', {count:0, plCounts:[0,0,0,0,0], potCounts:[0,0,0]});
     $('#hostDecisionBar').innerHTML = '';
     return;
   }
@@ -207,24 +254,28 @@ function renderCurrentViews(){
     '<h1>' + esc(e.name) + '</h1>' +
     '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="stage-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
-    '<div class="discussion-note-panel"><label for="discussionNote">现场讨论记录</label><textarea id="discussionNote" class="discussion-note-box" placeholder="例如：下一个 position 是什么、继任方向、发展动作、风险点、待确认事项…">' + esc(row.discussionNote || '') + '</textarea><div class="discussion-note-status" id="noteStatus">自动保存</div></div>';
+    '<div class="discussion-note-panel"><div class="discussion-note-title">现场讨论记录</div><div class="discussion-note-grid">' +
+      discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
+    '</div><div class="discussion-note-status" id="noteStatus">自动保存</div></div>';
 
   const counts = row.gridCounts || boxes.map(() => 0);
   const max = Math.max(1, ...counts);
   $('#voteSummary').textContent = voteSummaryText(row);
   $('#hostRecommend').textContent = '系统建议：' + recommendationText(row);
+  updateVoteAxisBands('.stage-nine-card', row);
   $('#hostNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>' + box + ' 宫</b><span>' + count + '票</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + '票 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
   $('#hostDecisionBar').innerHTML =
+    '<div><span>系统建议</span><b>' + esc(recommendationText(row)) + '</b></div>' +
     '<div><span>讨论结果</span><b>' + esc(decisionText(row)) + '</b></div>' +
     '<div class="decision-controls current-decision">' +
       '<select id="currentGridSelect">' + gridOptions(row) + '</select>' +
@@ -236,18 +287,20 @@ function renderCurrentViews(){
 
 
 function wireDiscussionNote(){
-  const textarea = $('#discussionNote');
+  const inputs = [...document.querySelectorAll('[data-note-key]')];
   const status = $('#noteStatus');
   const row = currentResult();
-  if (!textarea || !row) return;
+  if (!inputs.length || !row) return;
   noteSavingFor = row.id;
-  textarea.oninput = () => {
-    if (status) status.textContent = '正在输入…';
-    clearTimeout(noteSaveTimer);
-    const employeeId = row.id;
-    const note = textarea.value;
-    noteSaveTimer = setTimeout(() => saveDiscussionNote(employeeId, note), 700);
-  };
+  const collect = () => Object.fromEntries(inputs.map(input => [input.dataset.noteKey, input.value]));
+  inputs.forEach(input => {
+    input.oninput = () => {
+      if (status) status.textContent = '正在输入…';
+      clearTimeout(noteSaveTimer);
+      const employeeId = row.id;
+      noteSaveTimer = setTimeout(() => saveDiscussionNote(employeeId, collect()), 700);
+    };
+  });
 }
 
 async function saveDiscussionNote(employeeId, note){
@@ -292,8 +345,8 @@ function renderZones(rows){
   $('#directCount').textContent = direct.length + ' 人';
   $('#pendingCount').textContent = pending.length + ' 人';
   $('#undiscussedCount').textContent = undiscussed.length + ' 人';
-  $('#directZone').innerHTML = direct.length ? direct.map(r => zonePerson(r, r.decision.grid + ' 宫')).join('') : '<div class="empty">尚无人选</div>';
-  $('#pendingZone').innerHTML = pending.length ? pending.map(r => zonePerson(r, r.recommendedGrid ? '推荐 ' + r.recommendedGrid + ' 宫' : '暂不推荐')).join('') : '<div class="empty">尚无人选</div>';
+  $('#directZone').innerHTML = direct.length ? direct.map(r => zonePerson(r, 'Box ' + r.decision.grid)).join('') : '<div class="empty">尚无人选</div>';
+  $('#pendingZone').innerHTML = pending.length ? pending.map(r => zonePerson(r, r.recommendedGrid ? '推荐 Box ' + r.recommendedGrid : '暂不推荐')).join('') : '<div class="empty">尚无人选</div>';
   $('#undiscussedZone').innerHTML = undiscussed.length ? undiscussed.map(r => zonePerson(r, r.count ? r.count + '票' : '未评估')).join('') : '<div class="empty">已全部讨论</div>';
 }
 

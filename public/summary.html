@@ -26,6 +26,7 @@
     </div>
     <div class="initial-filter-controls">
       <select id="levelFilter"></select>
+      <input id="summarySearch" class="summary-search" type="search" placeholder="搜索姓名 / 部门 / 岗位">
       <button class="secondary" id="clearFilter">查看全部</button>
     </div>
   </section>
@@ -36,20 +37,20 @@
     <section class="card">
       <div class="section">
         <div>
-          <h2>最终九宫格落位</h2>
+          <h2>最终 9-Box 落位</h2>
           <span class="muted" id="filterHint">全部员工</span>
         </div>
-        <span class="muted" id="moveStatus">可在宫格之间拖动，也可拖到右侧待定区；触屏设备点击姓名调整</span>
+        <span class="muted" id="moveStatus">可在Box 之间拖动，也可拖到右侧待定区；触屏设备点击姓名调整</span>
       </div>
       <div class="ninebox">
-        <div class="axis-y">潜力 POT 高 → 低</div>
+        <div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div>
         <div class="nine-grid" id="nineGrid"></div>
-        <div class="axis-x">绩效 PL 低 → 高</div>
+        <div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div>
       </div>
     </section>
     <aside class="card zone pending side-pending" id="pendingDrop" ondragover="event.preventDefault()" ondrop="dropToPending(event)">
       <div class="section"><h2>待定名单</h2><span class="muted" id="pendingCount"></span></div>
-      <p class="muted pending-tip">可将九宫格人员拖入此处待定；讨论确定后再拖回目标宫格</p>
+      <p class="muted pending-tip">可将9-Box 人员拖入此处待定；讨论确定后再拖回目标 Box</p>
       <div class="zone-list" id="pendingList"></div>
     </aside>
   </div>
@@ -70,6 +71,19 @@
     </div>
   </section>
 </main>
+
+<div class="box-modal" id="boxModal" hidden onclick="if(event.target===this) closeBoxModal()">
+  <div class="box-modal-panel" role="dialog" aria-modal="true" aria-labelledby="boxModalTitle">
+    <div class="box-modal-head">
+      <div>
+        <h2 id="boxModalTitle">Box</h2>
+        <p class="muted" id="boxModalCount"></p>
+      </div>
+      <button class="secondary" onclick="closeBoxModal()">关闭</button>
+    </div>
+    <div class="box-modal-list" id="boxModalList"></div>
+  </div>
+</div>
 
 <script>
 const roomId = new URLSearchParams(location.search).get('room') || 'default';
@@ -93,11 +107,41 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 const $ = s => document.querySelector(s);
+const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const gridOrder = [6,3,1,8,5,2,9,7,4];
 const levelKeys = ['岗位级别','职级','岗位等级','层级','Level','level','级别'];
 let rows = [];
 let activeLevel = '';
+let searchQuery = '';
+let expandedBox = null;
+
+
+const plGroupLabels = ['PL 1-2','PL3','PL 4-5'];
+const potGroupLabels = ['POT1','POT2','POT3'];
+function groupCounts(row, type){
+  if (type === 'pl') return row.plGroupCounts || [(row.plCounts?.[0] || 0) + (row.plCounts?.[1] || 0), row.plCounts?.[2] || 0, (row.plCounts?.[3] || 0) + (row.plCounts?.[4] || 0)];
+  return row.potGroupCounts || [row.potCounts?.[0] || 0, row.potCounts?.[1] || 0, row.potCounts?.[2] || 0];
+}
+function groupedDistHtml(row, type){
+  const labels = type === 'pl' ? plGroupLabels : potGroupLabels;
+  const counts = groupCounts(row, type);
+  return '<div class="dist grouped-dist">' + labels.map((label,index) => '<span>' + label + ' <b>' + (counts[index] || 0) + '</b><small>' + pct(counts[index] || 0, row.count) + '</small></span>').join('') + '</div>';
+}
+
+
+function updateFinalAxisBands(scope, direct, totalRows){
+  const root = typeof scope === 'string' ? document.querySelector(scope) : scope;
+  if (!root) return;
+  const boxes = direct.map(row => row.decision?.grid).filter(Boolean);
+  const total = totalRows.length;
+  const plCounts = [boxes.filter(box => [6,8,9].includes(box)).length, boxes.filter(box => [3,5,7].includes(box)).length, boxes.filter(box => [1,2,4].includes(box)).length];
+  const potCounts = [boxes.filter(box => [9,7,4].includes(box)).length, boxes.filter(box => [8,5,2].includes(box)).length, boxes.filter(box => [6,3,1].includes(box)).length];
+  const xLabels = ['PL1-2','PL3','PL4-5'];
+  const yLabels = ['POT3','POT2','POT1'];
+  root.querySelectorAll('.axis-x-bands span').forEach((el,index) => el.textContent = xLabels[index] + ' ' + pct(plCounts[index], total));
+  root.querySelectorAll('.axis-y-bands span').forEach((el,index) => { const sourceIndex = [2,1,0][index]; el.textContent = yLabels[index] + ' ' + pct(potCounts[sourceIndex], total); });
+}
 
 function levelOf(row){
   const fields = row.fields || {};
@@ -105,8 +149,18 @@ function levelOf(row){
   return key ? String(fields[key]).trim() : (row.role || '未填写');
 }
 
+function searchableText(row){
+  const fields = row.fields || {};
+  return [row.name, row.department, row.role, levelOf(row), row.id, ...Object.values(fields)].map(value => String(value ?? '').toLowerCase()).join(' ');
+}
+
 function filteredRows(){
-  return activeLevel ? rows.filter(row => levelOf(row) === activeLevel) : rows;
+  const keyword = searchQuery.trim().toLowerCase();
+  return rows.filter(row => {
+    const levelOk = !activeLevel || levelOf(row) === activeLevel;
+    const searchOk = !keyword || searchableText(row).includes(keyword);
+    return levelOk && searchOk;
+  });
 }
 
 function renderFilter(){
@@ -128,7 +182,7 @@ async function moveEmployee(employeeId, grid){
     body: JSON.stringify({employeeId, type:'direct', grid})
   });
   const data = await response.json();
-  $('#moveStatus').textContent = response.ok ? '已调整到 ' + grid + ' 宫' : data.error;
+  $('#moveStatus').textContent = response.ok ? '已调整到 Box ' + grid : data.error;
 }
 
 async function moveToPending(employeeId){
@@ -154,13 +208,37 @@ function dropToPending(event){
   if (employeeId) moveToPending(employeeId);
 }
 
+function membersOfBox(box){
+  return filteredRows().filter(row => row.decision?.type === 'direct' && row.decision.grid === box);
+}
+
+function openBoxModal(box){
+  expandedBox = box;
+  const members = membersOfBox(box);
+  $('#boxModalTitle').textContent = 'Box ' + box;
+  $('#boxModalCount').textContent = members.length + ' 人，点击姓名可调整落位';
+  $('#boxModalList').innerHTML = members.length ? members.map(row => '<button class="box-modal-person" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + row.decision.grid + '); closeBoxModal();"><span>' + esc(row.name) + '</span></button>').join('') : '<div class="empty">这个 Box 暂时没有人员</div>';
+  $('#boxModal').hidden = false;
+  document.body.classList.add('modal-open');
+}
+
+function closeBoxModal(){
+  expandedBox = null;
+  $('#boxModal').hidden = true;
+  document.body.classList.remove('modal-open');
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('#boxModal').hidden) closeBoxModal();
+});
+
 function chooseGrid(employeeId, current){
-  const value = window.prompt('请输入目标宫格（1-9），输入 0 移到待定区', String(current));
+  const value = window.prompt('请输入目标 Box（1-9），输入 0 移到待定区', String(current));
   if (value === null) return;
   const grid = Number(value);
   if (grid === 0) { moveToPending(employeeId); return; }
   if (!Number.isInteger(grid) || grid < 1 || grid > 9) {
-    $('#moveStatus').textContent = '请输入 0-9：0 为待定，1-9 为目标宫格';
+    $('#moveStatus').textContent = '请输入 0-9：0 为待定，1-9 为目标 Box';
     return;
   }
   moveEmployee(employeeId, grid);
@@ -173,7 +251,7 @@ function render(){
   const direct = list.filter(row => row.decision?.type === 'direct');
   const pending = list.filter(row => row.decision?.type === 'pending');
   const open = list.filter(row => !row.decision);
-  $('#filterHint').textContent = activeLevel ? '当前筛选：' + activeLevel : '全部员工';
+  $('#filterHint').textContent = (activeLevel ? '当前筛选：' + activeLevel : '全部员工') + (searchQuery ? ' · 搜索：' + searchQuery : '');
   const stats = [
     ['盘点员工', list.length, '人'],
     ['已参与评估', reviewed.length, '人'],
@@ -183,26 +261,27 @@ function render(){
     ['尚未讨论', open.length, '人']
   ];
   $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
+  updateFinalAxisBands('.ninebox', direct, list);
   $('#nineGrid').innerHTML = gridOrder.map(box => {
     const members = direct.filter(row => row.decision.grid === box);
-    return '<div class="nine-cell cell-' + box + '" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>' + box + ' 宫</b><span>' + members.length + ' 人</span></div><div class="cell-people">' +
-      (members.length ? members.map(row => '<div class="grid-person name-only" draggable="true" title="拖动或点击调整宫格" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + row.decision.grid + ')"><b>' + esc(row.name) + '</b></div>').join('') : '<em>—</em>') +
+    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people">' +
+      (members.length ? members.map(row => '<div class="grid-person name-only" draggable="true" title="拖动或点击调整 Box" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + row.decision.grid + ')"><b>' + esc(row.name) + '</b></div>').join('') : '<em>—</em>') +
       '</div></div>';
   }).join('');
   $('#pendingCount').textContent = pending.length + ' 人';
   $('#openCount').textContent = open.length + ' 人';
-  $('#pendingList').innerHTML = pending.length ? pending.map(row => '<div class="pending-person" draggable="true" title="拖入九宫格，或点击选择宫格" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (row.recommendedGrid || 5) + ')"><b>' + esc(row.name) + '</b><span>' + (row.recommendedGrid ? '推荐 ' + row.recommendedGrid + ' 宫' : '暂不推荐') + '</span></div>').join('') : '<div class="empty">尚无待定人员</div>';
-  $('#openList').innerHTML = open.length ? open.map(row => '<div class="zone-person open-person" draggable="true" title="拖到待定区，或点击直接移入待定" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="moveToPending(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'))"><div><b>' + esc(row.name) + '</b><span>' + esc(row.department) + ' · ' + esc(row.role) + '</span></div><strong>' + (row.recommendedGrid ? '推荐 ' + row.recommendedGrid + ' 宫' : '暂不推荐') + '</strong></div>').join('') : '<div class="empty">暂无人员</div>';
+  $('#pendingList').innerHTML = pending.length ? pending.map(row => '<div class="pending-person" draggable="true" title="拖入 9-Box，或点击选择 Box" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (row.recommendedGrid || 5) + ')"><b>' + esc(row.name) + '</b><span>' + (row.recommendedGrid ? '推荐 Box ' + row.recommendedGrid : '暂不推荐') + '</span></div>').join('') : '<div class="empty">尚无待定人员</div>';
+  $('#openList').innerHTML = open.length ? open.map(row => '<div class="zone-person open-person" draggable="true" title="拖到待定区，或点击直接移入待定" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="moveToPending(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'))"><div><b>' + esc(row.name) + '</b><span>' + esc(row.department) + ' · ' + esc(row.role) + '</span></div><strong>' + (row.recommendedGrid ? '推荐 Box ' + row.recommendedGrid : '暂不推荐') + '</strong></div>').join('') : '<div class="empty">暂无人员</div>';
   $('#detail').innerHTML = list.map(row => '<tr>' +
     '<td><div class="employee-name">' + (row.photo ? '<img class="thumb" src="' + row.photo + '" alt="">' : '') + '<div><b>' + esc(row.name) + '</b><div class="muted">' + esc(row.role) + '</div></div></div></td>' +
     '<td>' + esc(row.department) + '</td>' +
     '<td>' + esc(levelOf(row)) + '</td>' +
     '<td>' + row.count + '</td>' +
-    '<td><div class="dist">' + row.plCounts.map((n,i) => '<span>PL' + (i + 1) + ' <b>' + n + '</b></span>').join('') + '</div></td>' +
-    '<td><div class="dist">' + row.potCounts.map((n,i) => '<span>POT' + (i + 1) + ' <b>' + n + '</b></span>').join('') + '</div></td>' +
+    '<td>' + groupedDistHtml(row, 'pl') + '</td>' +
+    '<td>' + groupedDistHtml(row, 'pot') + '</td>' +
     '<td>PL <b>' + (row.count ? row.avgPL.toFixed(2) : '—') + '</b><br>POT <b>' + (row.count ? row.avgPOT.toFixed(2) : '—') + '</b></td>' +
-    '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + (row.recommendedGrid ? 'PL' + row.majorityPL + ' · POT' + row.majorityPOT + '<br><b>' + row.recommendedGrid + ' 宫</b>' : '暂不推荐') + '</span></td>' +
-    '<td>' + (row.decision?.type === 'direct' ? '直接落位 · ' + row.decision.grid + ' 宫' : row.decision?.type === 'pending' ? '待定' : '未讨论') + '</td>' +
+    '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + (row.recommendedGrid ? 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>' : '暂不推荐') + '</span></td>' +
+    '<td>' + (row.decision?.type === 'direct' ? '直接落位 · ' + 'Box ' + row.decision.grid : row.decision?.type === 'pending' ? '待定' : '未讨论') + '</td>' +
   '</tr>').join('');
 }
 
@@ -212,7 +291,8 @@ async function load(){
 }
 
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; render(); };
-$('#clearFilter').onclick = () => { activeLevel = ''; render(); };
+$('#summarySearch').oninput = event => { searchQuery = event.target.value; render(); };
+$('#clearFilter').onclick = () => { activeLevel = ''; searchQuery = ''; $('#summarySearch').value = ''; render(); };
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);

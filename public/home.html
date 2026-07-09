@@ -13,8 +13,10 @@
       <div class="brand">人才盘点 · 讨论区首页</div>
       <div class="muted"><span class="status-dot"></span>每个讨论区都有独立二维码和独立数据</div>
     </div>
-    <div class="actions">
-      <a class="btn secondary-link" href="/admin.html">进入默认讨论区</a>
+    <div class="actions home-top-actions">
+      <a class="btn secondary-link" href="/admin.html">默认主持后台</a>
+      <a class="btn secondary-link" href="/initial-results.html">默认初评结果</a>
+      <a class="btn secondary-link" href="/summary.html">默认当场总览</a>
     </div>
   </div>
 
@@ -43,14 +45,14 @@ async function loadRooms(){
     const qr = '/api/qr.svg?room=' + encodeURIComponent(room.id);
     return '<article class="card room-card">' +
       '<div class="room-card-head"><div><h2>' + esc(room.name) + '</h2><p class="muted">' + esc(room.id) + ' · ' + (room.total || 0) + ' 人</p></div><span>讨论区</span></div>' +
-      '<img class="room-qr" src="' + qr + '" alt="' + esc(room.name) + ' 二维码">' +
-      '<a class="url" target="_blank" href="' + roomUrl('/index.html', room.id) + '">' + esc(abs('/index.html', room.id)) + '</a>' +
+      '<div class="room-card-body"><div class="room-qr-wrap"><img class="room-qr" src="' + qr + '" alt="' + esc(room.name) + ' 二维码"><span>现场扫码投票</span></div>' +
+      '<div class="room-main-links"><a class="url" target="_blank" href="' + roomUrl('/index.html', room.id) + '">' + esc(abs('/index.html', room.id)) + '</a>' +
       '<div class="room-actions">' +
-        '<a class="btn" href="' + roomUrl('/admin.html', room.id) + '">进入主持后台</a>' +
-        '<a class="btn secondary-link" href="' + roomUrl('/pre.html', room.id) + '">会前初评</a>' +
-        '<a class="btn secondary-link" href="' + roomUrl('/initial-results.html', room.id) + '">初评结果</a>' +
-        '<a class="btn secondary-link" href="' + roomUrl('/summary.html', room.id) + '">当场总览</a>' +
-      '</div>' +
+        '<a class="room-action primary" href="' + roomUrl('/admin.html', room.id) + '"><b>主持后台</b><span>现场投屏与讨论</span></a>' +
+        '<a class="room-action" href="' + roomUrl('/pre.html', room.id) + '"><b>会前初评</b><span>提前发给评委</span></a>' +
+        '<a class="room-action highlight" href="' + roomUrl('/initial-results.html', room.id) + '"><b>初评结果</b><span>看初评 9-Box</span></a>' +
+        '<a class="room-action highlight" href="' + roomUrl('/summary.html', room.id) + '"><b>当场总览</b><span>看最终 9-Box</span></a>' +
+      '</div></div></div>' +
     '</article>';
   }).join('') || '<div class="card empty">暂无讨论区</div>';
 }
