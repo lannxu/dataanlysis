@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人才盘点 · 我的初评结果</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/i18n.js"></script>
+</head>
+<body>
+<main class="shell pre-shell">
+  <div class="top">
+    <div>
+      <div class="brand">我的初评结果</div>
+      <div class="muted"><span class="status-dot"></span>查看自己当前保留的会前初评记录</div>
+    </div>
+  </div>
+
+  <section class="card my-votes-card">
+    <div class="pre-toolbar my-votes-toolbar">
+      <label>评估人</label>
+      <input id="evaluatorName" placeholder="输入提交时使用的姓名或编号">
+      <button id="loadVotes">查看结果</button>
+    </div>
+    <p class="muted pre-skip-tip">如果你提交过多次，系统只显示最后一次保留的结果。</p>
+    <div class="toast" id="status"></div>
+  </section>
+
+  <section class="card my-current-vote-card" style="margin-top:16px">
+    <div class="section"><h2>正在讨论</h2><span class="muted" id="currentStatus">跟随主持后台实时更新</span></div>
+    <div id="currentVoteView"><div class="empty">请输入评估人姓名或编号后查看当前员工</div></div>
+  </section>
+
+  <section class="card my-votes-card" style="margin-top:16px">
+    <div class="section"><h2>我的全部记录</h2><span class="muted" id="voteCount">--</span></div>
+    <div class="my-votes-list" id="myVotesList"><div class="empty">请输入评估人姓名或编号后查看</div></div>
+  </section>
+</main>
+
+<script>
+const roomId = new URLSearchParams(location.search).get('room') || 'default';
+const roomUrl = value => {
+  const u = new URL(value, location.href);
+  if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  return u.pathname + u.search + u.hash;
+};
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => nativeFetch(typeof input === 'string' && input.startsWith('/api/') ? roomUrl(input) : input, init);
+const $ = s => document.querySelector(s);
+const wsRoomPath = roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : '';
+let myItems = [];
+let currentEmployee = null;
+let statePollTimer = null;
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function restoreName(){
+  try { $('#evaluatorName').value = localStorage.getItem('preEvaluatorName') || ''; } catch {}
+}
+function saveName(){
+  try { localStorage.setItem('preEvaluatorName', $('#evaluatorName').value.trim()); } catch {}
+}
+function voteText(item){
+  if (item.skip) return '<span class="my-vote-skip">Skip</span>';
+  return '<span class="recommend">PL' + item.pl + ' / POT' + item.pot + '<br><b>Box ' + item.grid + '</b></span>';
+}
+function renderCurrent(){
+  const box = $('#currentVoteView');
+  if (!box) return;
+  if (!currentEmployee) { box.innerHTML = '<div class="empty">等待主持人选择员工</div>'; return; }
+  const item = myItems.find(x => x.employeeId === currentEmployee.id);
+  box.innerHTML = '<div class="my-current-person">' +
+    '<div><b>' + esc(currentEmployee.name) + '</b><span>' + esc([currentEmployee.department, currentEmployee.role].filter(Boolean).join(' · ')) + '</span></div>' +
+    '<div>' + (item ? voteText(item) : '<span class="my-vote-missing">尚未评价</span>') + '</div>' +
+    '<p>' + (item?.comment ? esc(item.comment) : (item ? '<em>暂无 Comments</em>' : '<em>你没有提交过这位员工的初评</em>')) + '</p>' +
+  '</div>';
+  $('#currentStatus').textContent = item ? '已显示你的初评记录' : '当前员工暂无你的记录';
+}
+
+function render(items){
+  myItems = items || [];
+  $('#voteCount').textContent = myItems.length + ' 条';
+  $('#myVotesList').innerHTML = myItems.length ? myItems.map(item =>
+    '<div class="my-vote-item">' +
+      '<div><b>' + esc(item.name) + '</b><span>' + esc([item.department, item.role].filter(Boolean).join(' · ')) + '</span></div>' +
+      '<div>' + voteText(item) + '</div>' +
+      '<p>' + (item.comment ? esc(item.comment) : '<em>暂无 Comments</em>') + '</p>' +
+    '</div>'
+  ).join('') : '<div class="empty">没有查到记录，请确认姓名/编号是否和提交时一致</div>';
+  renderCurrent();
+}
+async function loadState(){
+  try {
+    const data = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
+    currentEmployee = data.employee || null;
+    renderCurrent();
+  } catch {
+    const status = $('#currentStatus');
+    if (status) status.textContent = '同步中断，请确认手机和电脑在同一网络';
+  }
+}
+function applyStateMessage(message){
+  if (message?.data?.employee) {
+    currentEmployee = message.data.employee;
+    renderCurrent();
+  } else {
+    loadState();
+  }
+}
+
+async function loadVotes(){
+  const name = $('#evaluatorName').value.trim();
+  saveName();
+  if (!name) {
+    $('#status').textContent = '请输入评估人姓名或编号';
+    render([]);
+    return;
+  }
+  $('#status').textContent = '正在查询…';
+  const response = await fetch('/api/my-votes?evaluatorName=' + encodeURIComponent(name), {cache:'no-store'});
+  const data = await response.json();
+  if (!response.ok) {
+    $('#status').textContent = data.error || '查询失败';
+    render([]);
+    return;
+  }
+  $('#status').textContent = '已查询到 ' + data.total + ' 条记录';
+  render(data.items || []);
+}
+function connect(){
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
+  ws.onmessage = event => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'state' || message.type === 'current') { applyStateMessage(message); }
+    if (message.type === 'results' || message.type === 'employees') { if ($('#evaluatorName').value.trim()) loadVotes(); else loadState(); }
+  };
+  ws.onopen = () => { const status = $('#currentStatus'); if (status) status.textContent = '已连接，跟随主持后台实时更新'; };
+  ws.onclose = () => { const status = $('#currentStatus'); if (status) status.textContent = '正在重新连接，同步会自动恢复'; setTimeout(connect, 1200); };
+}
+
+$('#loadVotes').onclick = loadVotes;
+$('#evaluatorName').addEventListener('keydown', event => { if (event.key === 'Enter') loadVotes(); });
+restoreName();
+loadState();
+connect();
+statePollTimer = setInterval(loadState, 2000);
+if ($('#evaluatorName').value.trim()) loadVotes();
+</script>
+</body>
+</html>

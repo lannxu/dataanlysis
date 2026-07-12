@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>人才盘点后台</title>
   <link rel="stylesheet" href="/styles.css">
+  <script defer src="/i18n.js"></script>
 </head>
 <body class="admin-stage-body">
 <main class="admin-stage-shell">
@@ -37,8 +38,13 @@
           <input id="qrAddress" aria-label="手机访问地址">
           <button id="refreshQr">重新生成</button>
         </div>
-        <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需连接同一 Wi-Fi。</div>
+        <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需要连接同一 Wi-Fi。</div>
       </details>
+      <div class="current-initial-share">
+        <h3>当前员工初评结果</h3>
+        <img id="currentInitialQr" alt="当前员工初评结果二维码">
+        <a class="url" id="currentInitialUrl" target="_blank"></a>
+      </div>
     </aside>
 
     <section class="card stage-profile-card">
@@ -75,15 +81,15 @@
     <div class="decision-grid compact-zones">
       <section class="zone direct">
         <div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div>
-        <div class="zone-list" id="directZone"><div class="empty">尚无人选</div></div>
+        <div class="zone-list" id="directZone"><div class="empty">暂无人员</div></div>
       </section>
       <section class="zone pending">
         <div class="section"><h2>待定区</h2><span class="muted" id="pendingCount">0 人</span></div>
-        <div class="zone-list" id="pendingZone"><div class="empty">尚无人选</div></div>
+        <div class="zone-list" id="pendingZone"><div class="empty">暂无人员</div></div>
       </section>
       <section class="zone undiscussed">
         <div class="section"><h2>未讨论区</h2><span class="muted" id="undiscussedCount">0 人</span></div>
-        <div class="zone-list" id="undiscussedZone"><div class="empty">尚无人选</div></div>
+        <div class="zone-list" id="undiscussedZone"><div class="empty">暂无人员</div></div>
       </section>
     </div>
     <section style="margin-top:16px">
@@ -152,20 +158,45 @@ function currentResult(){
   return resultRows.find(row => row.id === id) || null;
 }
 
+function performanceLevelForGrid(grid, currentPl){
+  grid = Number(grid);
+  const existing = Number(currentPl || 0);
+  if ([1,2,4].includes(grid)) {
+    const value = window.prompt('This Box includes PL4 and PL5. Please enter the exact PL: 4 or 5.', [4,5].includes(existing) ? String(existing) : '4');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![4,5].includes(pl)) { alert('Please enter 4 or 5.'); return null; }
+    return pl;
+  }
+  if ([6,8,9].includes(grid)) {
+    const value = window.prompt('This Box includes PL1 and PL2. Please enter the exact PL: 1 or 2.', [1,2].includes(existing) ? String(existing) : '2');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![1,2].includes(pl)) { alert('Please enter 1 or 2.'); return null; }
+    return pl;
+  }
+  if (grid === 3 || grid === 5 || grid === 7) return 3;
+  return null;
+}
+
+function decisionPlText(row){
+  return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
+}
+
 function decisionText(row){
-  if (!row?.decision) return '尚未讨论';
-  if (row.decision.type === 'pending') return '待定';
-  return '直接落位 · ' + 'Box ' + row.decision.grid;
+  if (!row?.decision) return 'Not discussed';
+  if (row.decision.type === 'pending') return 'Pending';
+  return 'Direct · Box ' + row.decision.grid + decisionPlText(row);
 }
 
 function recommendationText(row){
-  if (!row?.recommendedGrid) return '暂不推荐';
-  return '建议 Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
+  if (!row?.recommendedGrid) return 'No recommendation';
+  return 'Recommended Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + ' consensus';
 }
 
 function gridOptions(row){
   const selected = row?.decision?.grid || row?.recommendedGrid || 5;
-  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>Box ' + n + '</option>').join('');
+  return boxes.map(n => '<option value="' + n + '" ' + (n === selected ? 'selected' : '') + '>Box ' + n + '</option>').join('\n');
 }
 
 
@@ -207,8 +238,8 @@ function voteSummaryText(row){
   const parts = boxes.map((box, index) => ({box, count: counts[index] || 0}))
     .filter(x => x.count > 0)
     .sort((a,b) => b.count - a.count || a.box - b.box);
-  if (!row?.count) return '暂无投票';
-  return row.count + '人投票，' + parts.map(x => x.count + '个在 Box ' + x.box).join('，');
+  if (!row?.count) return 'No votes yet';
+  return row.count + ' votes, ' + parts.map(x => x.count + ' in Box ' + x.box).join(', ');
 }
 
 function renderEmployeePicker(){
@@ -233,58 +264,60 @@ function renderReviewProgress(){
 
 function renderCurrentViews(){
   const row = currentResult();
-  const e = state?.employee;
-  if (!e || !row) {
-    $('#stageProfile').innerHTML = '<div class="empty">暂无当前员工</div>';
+  const e = row || state?.employee;
+  if (!e) {
+    $('#stageProfile').innerHTML = '<div class="empty">No employee</div>';
     $('#hostNineGrid').innerHTML = '';
-    $('#voteSummary').textContent = '暂无投票';
-    $('#hostRecommend').textContent = '系统建议：--';
+    $('#voteSummary').textContent = 'No votes yet';
+    $('#hostRecommend').textContent = 'System Suggestion: --';
     updateVoteAxisBands('.stage-nine-card', {count:0, plCounts:[0,0,0,0,0], potCounts:[0,0,0]});
     $('#hostDecisionBar').innerHTML = '';
     return;
   }
-  const fields = Object.entries(e.fields || {}).filter(([, value]) => String(value ?? '').trim());
+  const normField = value => String(value || '').toLowerCase().replace(/[^a-z0-9一-龥]+/g, '');
+  const fieldValue = names => Object.entries(e.fields || {}).find(([key]) => names.map(normField).includes(normField(key)))?.[1] || '';
+  const baseKeys = new Set(['band','edsp2025','pl2025','pl2024']);
+  const fields = Object.entries(e.fields || {}).filter(([key, value]) => String(value ?? '').trim() && !baseKeys.has(normField(key)));
   const basicInfo = [
-    ['员工编号', e.id],
-    ['部门', e.department],
-    ['岗位', e.role]
+    ['Dept', e.department], ['Position', e.role],
+    ['Band', fieldValue(['Band','职级'])], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])],
+    ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
   ].filter(([, value]) => String(value ?? '').trim());
   $('#stageProfile').innerHTML =
-    '<div class="stage-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
-    '<h1>' + esc(e.name) + '</h1>' +
+    '<div class="profile-head"><div class="stage-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
+    '<div class="profile-title"><span>Employee No</span><b>' + esc(e.id) + '</b><span>Name</span><h1>' + esc(e.name) + '</h1></div></div>' +
     '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="stage-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
-    '<div class="discussion-note-panel"><div class="discussion-note-title">现场讨论记录</div><div class="discussion-note-grid">' +
+    '<div class="discussion-note-panel"><div class="discussion-note-title">Discussion Notes</div><div class="discussion-note-grid">' +
       discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
-    '</div><div class="discussion-note-status" id="noteStatus">自动保存</div></div>';
+    '</div><div class="discussion-note-status" id="noteStatus">Auto save</div></div>';
 
   const counts = row.gridCounts || boxes.map(() => 0);
   const max = Math.max(1, ...counts);
   $('#voteSummary').textContent = voteSummaryText(row);
-  $('#hostRecommend').textContent = '系统建议：' + recommendationText(row);
+  $('#hostRecommend').textContent = 'System Suggestion: ' + recommendationText(row);
   updateVoteAxisBands('.stage-nine-card', row);
   $('#hostNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + '票 · ' + pct(count, row.count) + '</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' votes · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
-      '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
+      '<div class="cell-note">' + (isDecision ? 'Discussion Result' : (isRecommend ? 'System Suggestion' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
   $('#hostDecisionBar').innerHTML =
-    '<div><span>系统建议</span><b>' + esc(recommendationText(row)) + '</b></div>' +
-    '<div><span>讨论结果</span><b>' + esc(decisionText(row)) + '</b></div>' +
+    '<div><span>System Suggestion</span><b>' + esc(recommendationText(row)) + '</b></div>' +
+    '<div><span>Discussion Result</span><b>' + esc(decisionText(row)) + '</b></div>' +
     '<div class="decision-controls current-decision">' +
       '<select id="currentGridSelect">' + gridOptions(row) + '</select>' +
-      '<button onclick="decideCurrent(\'direct\')">直接落位</button>' +
-      '<button class="secondary" onclick="decideCurrent(\'pending\')">待定</button>' +
+      '<button onclick="decideCurrent(\'direct\')">Place Directly</button>' +
+      '<button class="secondary" onclick="decideCurrent(\'pending\')">Pending</button>' +
     '</div>';
   wireDiscussionNote();
 }
-
 
 function wireDiscussionNote(){
   const inputs = [...document.querySelectorAll('[data-note-key]')];
@@ -295,7 +328,7 @@ function wireDiscussionNote(){
   const collect = () => Object.fromEntries(inputs.map(input => [input.dataset.noteKey, input.value]));
   inputs.forEach(input => {
     input.oninput = () => {
-      if (status) status.textContent = '正在输入…';
+      if (status) status.textContent = 'Editing...';
       clearTimeout(noteSaveTimer);
       const employeeId = row.id;
       noteSaveTimer = setTimeout(() => saveDiscussionNote(employeeId, collect()), 700);
@@ -305,7 +338,7 @@ function wireDiscussionNote(){
 
 async function saveDiscussionNote(employeeId, note){
   const status = $('#noteStatus');
-  if (status) status.textContent = '正在保存…';
+  if (status) status.textContent = 'Saving...';
   const response = await fetch('/api/discussion-note', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -313,12 +346,12 @@ async function saveDiscussionNote(employeeId, note){
   });
   const data = await response.json();
   if (!response.ok) {
-    if (status) status.textContent = data.error || '保存失败';
+    if (status) status.textContent = data.error || 'Save failed';
     return;
   }
   const row = resultRows.find(item => item.id === employeeId);
   if (row) row.discussionNote = data.note || '';
-  if (status && noteSavingFor === employeeId) status.textContent = '已自动保存';
+  if (status && noteSavingFor === employeeId) status.textContent = 'Saved';
 }
 
 function employeeIndexById(employeeId){
@@ -330,7 +363,7 @@ async function openEmployee(employeeId){
   if (index < 0) return;
   const panel = document.querySelector('.admin-tools-panel');
   if (panel) panel.open = false;
-  $('#decisionMsg').textContent = '已调出 ' + (resultRows[index]?.name || '该员工') + '，请在上方查看信息并做最终决定';
+  $('#decisionMsg').textContent = 'Loaded ' + (resultRows[index]?.name || 'this employee') + '. Review the profile and make the final decision.';
   await go(index);
 }
 
@@ -339,15 +372,18 @@ function zonePerson(row, statusText){
 }
 
 function renderZones(rows){
-  const direct = rows.filter(r => r.decision?.type === 'direct');
-  const pending = rows.filter(r => r.decision?.type === 'pending');
-  const undiscussed = rows.filter(r => !r.decision);
+  const direct = rows.filter(r => r.decision?.type === 'direct' || (!r.decision && r.recommendedGrid));
+  const pending = rows.filter(r => r.decision?.type === 'pending' || (!r.decision && !r.recommendedGrid && Number(r.count || 0) > 0));
+  const undiscussed = rows.filter(r => !r.decision && !r.recommendedGrid && Number(r.count || 0) === 0);
   $('#directCount').textContent = direct.length + ' 人';
   $('#pendingCount').textContent = pending.length + ' 人';
   $('#undiscussedCount').textContent = undiscussed.length + ' 人';
-  $('#directZone').innerHTML = direct.length ? direct.map(r => zonePerson(r, 'Box ' + r.decision.grid)).join('') : '<div class="empty">尚无人选</div>';
-  $('#pendingZone').innerHTML = pending.length ? pending.map(r => zonePerson(r, r.recommendedGrid ? '推荐 Box ' + r.recommendedGrid : '暂不推荐')).join('') : '<div class="empty">尚无人选</div>';
-  $('#undiscussedZone').innerHTML = undiscussed.length ? undiscussed.map(r => zonePerson(r, r.count ? r.count + '票' : '未评估')).join('') : '<div class="empty">已全部讨论</div>';
+  $('#directZone').innerHTML = direct.length ? direct.map(r => {
+    const text = r.decision?.type === 'direct' ? ('已确认 Box ' + r.decision.grid + decisionPlText(r)) : ('系统建议 Box ' + r.recommendedGrid + (r.recommendedPl ? ' · PL' + r.recommendedPl : ''));
+    return zonePerson(r, text);
+  }).join('') : '<div class="empty">暂无可直接落位人员</div>';
+  $('#pendingZone').innerHTML = pending.length ? pending.map(r => zonePerson(r, r.decision?.type === 'pending' ? '已标记待定' : '初评待定 · ' + (r.count || 0) + ' 票')).join('') : '<div class="empty">暂无待定人员</div>';
+  $('#undiscussedZone').innerHTML = undiscussed.length ? undiscussed.map(r => zonePerson(r, '未初评')).join('') : '<div class="empty">暂无未讨论人员</div>';
 }
 
 async function loadState(){
@@ -372,13 +408,15 @@ async function loadResults(){
 }
 
 async function decide(employeeId, type, grid){
+  const pl = type === 'direct' ? performanceLevelForGrid(Number(grid)) : null;
+  if (type === 'direct' && pl === null) return;
   const response = await fetch('/api/decision', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({employeeId, type, grid})
+    body: JSON.stringify({employeeId, type, grid:Number(grid), pl})
   });
   const data = await response.json();
-  $('#decisionMsg').textContent = response.ok ? (type === 'direct' ? '已放入直接落位区' : '已放入待定区') : data.error;
+  $('#decisionMsg').textContent = response.ok ? (type === 'direct' ? 'Moved to direct placement' : 'Moved to pending') : data.error;
   if (response.ok) loadResults();
 }
 
@@ -400,26 +438,45 @@ $('#employeePicker').onchange = event => go(Number(event.target.value));
 $('#employeeFile').onchange = async event => {
   const file = event.target.files[0];
   if (!file) return;
-  $('#uploadStatus').textContent = '正在读取名单…';
-  const response = await fetch('/api/import-employees', {method:'POST', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:file});
-  const data = await response.json();
-  if (!response.ok) { $('#uploadStatus').textContent = data.error; return; }
-  uploadedPhotos = Object.fromEntries(data.employees.filter(e => e.photo).map(e => [e.id, e.photo]));
-  uploadedFields = Object.fromEntries(data.employees.map(e => [e.id, e.fields || {}]));
-  $('#employees').value = data.employees.map(e => [e.id, e.name, e.department, e.role].join(',')).join('\n');
-  $('#uploadStatus').textContent = '已读取 ' + data.count + ' 人，其中 ' + data.photoCount + ' 人有照片、' + data.fieldCount + ' 个自定义字段；请核对后点击“确认并保存名单”';
-  event.target.value = '';
+  $('#uploadStatus').textContent = '正在读取名单...';
+  try {
+    const response = await fetch('/api/import-employees', {method:'POST', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:file});
+    const data = await response.json();
+    if (!response.ok) { $('#uploadStatus').textContent = data.error || '读取失败'; return; }
+    uploadedPhotos = Object.fromEntries(data.employees.filter(e => e.photo).map(e => [e.id, e.photo]));
+    uploadedFields = Object.fromEntries(data.employees.map(e => [e.id, e.fields || {}]));
+    $('#employees').value = data.employees.map(e => [e.id, e.name, e.department, e.role].join(',')).join('\n');
+    $('#uploadStatus').textContent = '已读取 ' + data.count + ' 名员工，正在保存到系统...';
+    await saveEmployeeList(data.employees, '已更新 ' + data.count + ' 名员工，基础信息已同步。');
+  } catch (error) {
+    $('#uploadStatus').textContent = '上传失败：' + (error.message || error);
+  } finally {
+    event.target.value = '';
+  }
 };
 
+async function saveEmployeeList(employees, successMessage){
+  const r = await fetch('/api/employees', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({employees})});
+  const text = await r.text();
+  let d = {};
+  try { d = text ? JSON.parse(text) : {}; } catch { d = {error:text}; }
+  const message = r.ok ? (successMessage || ('已保存 ' + d.total + ' 名员工')) : (d.error || '保存失败');
+  $('#saved').textContent = message;
+  $('#uploadStatus').textContent = message;
+  if (!r.ok) return false;
+  await loadState();
+  await loadResults();
+  return true;
+}
+
 $('#save').onclick = async () => {
-  const employees = $('#employees').value.split(/\r?\n/).filter(Boolean).map(line => {
+  const lines = $('#employees').value.split('\n').filter(Boolean);
+  const employees = lines.map(line => {
     const [id, name, department, role] = line.split(/[,，\t]/).map(x => x.trim());
     return {id, name, department, role, photo: uploadedPhotos[id] || '', fields: uploadedFields[id] || {}};
   });
-  const r = await fetch('/api/employees', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({employees})});
-  const d = await r.json();
-  $('#saved').textContent = r.ok ? '已保存 ' + d.total + ' 人' : d.error;
-  if (r.ok) loadResults();
+  $('#saved').textContent = '正在保存...';
+  await saveEmployeeList(employees);
 };
 
 async function loadQr(custom = ''){
@@ -435,15 +492,31 @@ async function loadPreQr(){
   const preUrl = new URL(q.url);
   preUrl.pathname = '/pre.html';
   preUrl.search = '';
+  if (roomId && roomId !== 'default') preUrl.searchParams.set('room', roomId);
   preUrl.hash = '';
   $('#preUrl').textContent = preUrl.toString();
   $('#preUrl').href = preUrl.toString();
-  $('#preQr').src = '/api/qr.svg?url=' + encodeURIComponent(preUrl.toString()) + '&v=' + Date.now();
+  $('#preQr').src = '/api/qr.svg?url=' + encodeURIComponent(preUrl.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
+}
+
+async function loadCurrentInitialQr(){
+  const q = await fetch('/api/qr').then(r => r.json());
+  const u = new URL(q.url);
+  u.pathname = '/initial-results.html';
+  u.search = '';
+  u.searchParams.set('view', 'person');
+  u.searchParams.set('follow', '1');
+  if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
+  u.hash = '';
+  $('#currentInitialUrl').textContent = u.toString();
+  $('#currentInitialUrl').href = u.toString();
+  $('#currentInitialQr').src = '/api/qr.svg?url=' + encodeURIComponent(u.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
 }
 
 $('#refreshQr').onclick = () => loadQr($('#qrAddress').value.trim());
 loadQr();
 loadPreQr();
+loadCurrentInitialQr();
 loadState();
 loadResults();
 

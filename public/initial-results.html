@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>人才盘点 · 初评结果</title>
   <link rel="stylesheet" href="/styles.css">
+  <script defer src="/i18n.js"></script>
 </head>
 <body>
 <main class="shell summary-shell initial-shell">
@@ -21,46 +22,20 @@
   </div>
 
 
-  <section class="card initial-import-card">
-    <div>
-      <h2>直接导入初评结果</h2>
-      <p class="muted">适合已经线下收集 Excel 的场景。模板列：员工编号、姓名、评估人、PL、POT、Comments、Skip。</p>
+  <section class="card initial-control-card">
+    <div class="initial-control-block">
+      <h2>按 Band 筛选</h2>
+      <p class="muted">可按 Band 看整体落位，也可以逐个查看员工初评。</p>
     </div>
-    <div class="initial-import-actions">
-      <a class="btn secondary-link" href="/api/initial-votes-template.xlsx" download>下载初评导入模板</a>
-      <label class="btn file-btn">上传初评结果 Excel<input id="initialVoteFile" type="file" accept=".xlsx" hidden></label>
-    </div>
-    <div class="toast" id="initialImportStatus"></div>
-  </section>
-
-  <section class="card initial-filter-card">
-    <div>
-      <h2>初评结果查看方式</h2>
-      <p class="muted">可以按岗位级别看一群人的整体落位，也可以点击单个员工，看这个人的初评 9-Box 分布。</p>
-    </div>
-    <div class="initial-filter-controls initial-mode-controls">
-      <button class="active" id="modeGroup" type="button">岗位级别总览</button>
-      <button class="secondary" id="modePerson" type="button">单人初评</button>
-    </div>
-  </section>
-
-  <section class="card initial-filter-card" id="groupToolbar">
-    <div>
-      <h2>按岗位级别筛选</h2>
-      <p class="muted">系统会优先识别 Excel 字段：岗位级别、职级、岗位等级、层级、Level；没有这些字段时可按岗位筛选。</p>
-    </div>
-    <div class="initial-filter-controls">
+    <div class="initial-filter-controls initial-level-controls" id="groupToolbar">
       <select id="levelFilter"></select>
       <button class="secondary" id="clearFilter">查看全部</button>
     </div>
-  </section>
-
-  <section class="card initial-person-toolbar" id="personToolbar" hidden>
-    <div>
-      <h2>逐个查看员工初评</h2>
-      <p class="muted">选择员工后，右侧 9-Box 会显示评委初评票数分布，和主持后台当前员工视图一致。</p>
+    <div class="initial-filter-controls initial-mode-controls">
+      <button class="active" id="modeGroup" type="button">Band 总览</button>
+      <button class="secondary" id="modePerson" type="button">单人初评</button>
     </div>
-    <div class="initial-person-controls">
+    <div class="initial-person-controls initial-inline-person-controls" id="personToolbar" hidden>
       <select id="personPicker"></select>
       <button class="secondary" id="prevPerson" type="button">上一位</button>
       <button class="secondary" id="nextPerson" type="button">下一位</button>
@@ -70,26 +45,34 @@
   <section id="groupView">
     <section class="kpis" id="kpis"></section>
 
-    <section class="card" style="margin-top:18px">
-      <div class="section">
-        <div>
-          <h2>筛选后的 9-Box 初评结果</h2>
-          <span class="muted" id="filterHint">全部员工</span>
+    <section class="initial-overview-grid">
+      <section class="card initial-nine-card">
+        <div class="section">
+          <div>
+            <h2>筛选后的 9-Box 初评结果</h2>
+            <span class="muted" id="filterHint">全部员工</span>
+          </div>
+          <span class="muted" id="moveStatus">可拖动姓名到其他 Box；触屏设备可点击姓名调整</span>
         </div>
-        <span class="muted" id="moveStatus">可拖动姓名到其他 Box；触屏设备可点击姓名调整</span>
-      </div>
-      <div class="ninebox initial-ninebox">
-        <div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div>
-        <div class="nine-grid" id="nineGrid"></div>
-        <div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div>
-      </div>
+        <div class="ninebox initial-ninebox">
+          <div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div>
+          <div class="nine-grid" id="nineGrid"></div>
+          <div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div>
+        </div>
+      </section>
+
+      <section class="card initial-pending-card">
+        <div class="section"><h2>待定区</h2><span class="muted" id="initialPendingCount">0 人</span></div>
+        <p class="muted pending-tip">未达到 75% 同 Box 共识的员工会进入待定区；点击姓名输入 PL/POT 后会自动进入对应 Box。</p>
+        <div class="zone-list" id="initialPendingList"></div>
+      </section>
     </section>
 
     <section class="card" style="margin-top:18px">
       <div class="section"><h2>明细</h2><span class="muted" id="detailCount"></span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>员工</th><th>部门</th><th>岗位</th><th>岗位级别</th><th>投票人数</th><th>Box 分布</th><th>系统推荐</th><th>Comments</th><th>当前落位</th></tr></thead>
+          <thead><tr><th>员工</th><th>部门</th><th>岗位</th><th>Band</th><th>投票人数</th><th>Box 分布</th><th>系统推荐</th><th>Comments</th><th>当前落位</th></tr></thead>
           <tbody id="detail"></tbody>
         </table>
       </div>
@@ -116,7 +99,41 @@
       </section>
     </section>
   </section>
+
+  <section class="card initial-share-card">
+    <div>
+      <h2>当前员工初评结果</h2>
+      <p class="muted">现场讨论时扫码查看当前员工的会前初评结果；主持后台切换上一位/下一位时，这里会实时跟随。</p>
+      <a class="url" id="followInitialUrl" target="_blank"></a>
+    </div>
+    <img id="followInitialQr" alt="单人初评互动页二维码">
+  </section>
+
+  <section class="card initial-import-card">
+    <div>
+      <h2>直接导入初评结果</h2>
+      <p class="muted">适合已经线下收集 Excel 的场景。模板列：Employee No、Name、Dept、Position、Band、PL 2025、PL 2024、EDSP 2025、PL 2026、POT 2026、Box、Comments。</p>
+    </div>
+    <div class="initial-import-actions">
+      <a class="btn secondary-link" href="/api/initial-votes-template.xlsx" download>下载初评导入模板</a>
+      <label class="btn file-btn">上传初评结果 Excel<input id="initialVoteFile" type="file" accept=".xlsx" hidden></label>
+    </div>
+    <div class="toast" id="initialImportStatus"></div>
+  </section>
 </main>
+
+<div class="box-modal" id="boxModal" hidden onclick="if(event.target===this) closeBoxModal()">
+  <div class="box-modal-panel" role="dialog" aria-modal="true" aria-labelledby="boxModalTitle">
+    <div class="box-modal-head">
+      <div>
+        <h2 id="boxModalTitle">Box</h2>
+        <p class="muted" id="boxModalCount"></p>
+      </div>
+      <button class="secondary" onclick="closeBoxModal()">关闭</button>
+    </div>
+    <div class="box-modal-list" id="boxModalList"></div>
+  </div>
+</div>
 
 <script>
 const roomId = new URLSearchParams(location.search).get('room') || 'default';
@@ -144,37 +161,56 @@ const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const boxes = [1,2,3,4,5,6,7,8,9];
 const gridOrder = [6,3,1,8,5,2,9,7,4];
-const levelKeys = ['岗位级别','职级','岗位等级','层级','Level','level','级别'];
+const levelKeys = ['Band','band','BAND','岗位级别','职级','岗位等级','层级','Level','level','级别'];
 let rows = [];
 let activeLevel = '';
-let mode = 'group';
+const viewModeParam = new URLSearchParams(location.search).get('view') || new URLSearchParams(location.search).get('mode') || '';
+const followHost = ['1','true','yes','host'].includes(String(new URLSearchParams(location.search).get('follow') || '').toLowerCase());
+let mode = viewModeParam === 'person' || followHost ? 'person' : 'group';
 let selectedPersonIndex = 0;
+let hostCurrentEmployeeId = '';
+const discussionNoteFields = [
+  ['strength','Strength'],
+  ['improvementArea','Improvement Area'],
+  ['nextStep','Next Step'],
+  ['developmentMeasures','Development Measures'],
+  ['riskOfLeaving','Risk of Leaving']
+];
+
+function normalizeDiscussionNote(note){
+  if (note && typeof note === 'object') return Object.fromEntries(discussionNoteFields.map(([key]) => [key, note[key] || '']));
+  return {strength: note || '', improvementArea: '', nextStep: '', developmentMeasures: '', riskOfLeaving: ''};
+}
 
 function levelOf(row){
   const fields = row.fields || {};
   const key = levelKeys.find(name => String(fields[name] ?? '').trim());
-  return key ? String(fields[key]).trim() : (row.role || '未填写');
+  return key ? String(fields[key]).trim() : '未填写';
 }
 
 function placementGrid(row){
   return row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
 }
 
+function recommendationPlText(row){
+  return row?.recommendedPl ? ' · PL' + row.recommendedPl : '';
+}
+
 function recommendation(row){
-  if (!row.recommendedGrid) return '暂不推荐';
-  return 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>'; 
+  if (!row.recommendedGrid) return '待定';
+  return 'Box ' + row.recommendedGrid + recommendationPlText(row) + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>'; 
 }
 
 function recommendationText(row){
-  if (!row?.recommendedGrid) return '暂不推荐';
-  return '建议 Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
+  if (!row?.recommendedGrid) return '待定';
+  return '建议 Box ' + row.recommendedGrid + recommendationPlText(row) + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
 }
 
 function placementText(row){
   const grid = placementGrid(row);
-  if (!grid) return row.decision?.type === 'pending' ? '待定' : '暂未落位';
+  if (!grid) return '待定';
   const source = row.decision?.type === 'direct' ? '已调整' : '系统推荐';
-  return source + ' · Box ' + grid;
+  return source + ' · Box ' + grid + (row.decision?.type === 'direct' ? decisionPlText(row) : recommendationPlText(row));
 }
 
 function boxDistribution(row){
@@ -253,7 +289,7 @@ function currentPerson(){
 
 function renderFilter(){
   const levels = [...new Set(rows.map(levelOf).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN'));
-  $('#levelFilter').innerHTML = '<option value="">全部岗位级别</option>' + levels.map(level => '<option value="' + esc(level) + '" ' + (level === activeLevel ? 'selected' : '') + '>' + esc(level) + '</option>').join('');
+  $('#levelFilter').innerHTML = '<option value="">全部 Band</option>' + levels.map(level => '<option value="' + esc(level) + '" ' + (level === activeLevel ? 'selected' : '') + '>' + esc(level) + '</option>').join('');
 }
 
 function renderMode(){
@@ -263,6 +299,10 @@ function renderMode(){
   $('#personView').hidden = mode !== 'person';
   $('#personToolbar').hidden = mode !== 'person';
   $('#groupToolbar').hidden = false;
+  if (followHost && mode === 'person') {
+    const hint = document.querySelector('.initial-control-block p');
+    if (hint) hint.textContent = '正在跟随主持后台当前员工；主持人切换下一位时，这里会自动同步。';
+  }
 }
 
 function draggedId(event){
@@ -270,13 +310,48 @@ function draggedId(event){
   return encoded ? decodeURIComponent(encoded) : '';
 }
 
-async function moveEmployee(employeeId, grid){
+function potentialForGrid(grid){
+  grid = Number(grid);
+  if ([1,3,6].includes(grid)) return 'POT3';
+  if ([2,5,8].includes(grid)) return 'POT2';
+  if ([4,7,9].includes(grid)) return 'POT1';
+  return '';
+}
+
+function performanceLevelForGrid(grid, currentPl){
+  grid = Number(grid);
+  const existing = Number(currentPl || 0);
+  const pot = potentialForGrid(grid);
+  if ([1,2,4].includes(grid)) {
+    const value = window.prompt('目标 Box ' + grid + ' 对应 ' + pot + '，并包含 PL4 和 PL5。请输入具体绩效：4 或 5', [4,5].includes(existing) ? String(existing) : '4');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![4,5].includes(pl)) { alert('请输入 4 或 5'); return null; }
+    return pl;
+  }
+  if ([6,8,9].includes(grid)) {
+    const value = window.prompt('目标 Box ' + grid + ' 对应 ' + pot + '，并包含 PL1 和 PL2。请输入具体绩效：1 或 2', [1,2].includes(existing) ? String(existing) : '2');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![1,2].includes(pl)) { alert('请输入 1 或 2'); return null; }
+    return pl;
+  }
+  if (grid === 3 || grid === 5 || grid === 7) { alert('目标 Box ' + grid + ' 对应 ' + pot + ' 和 PL3，将自动保存为 PL3。'); return 3; }
+  return null;
+}
+
+function decisionPlText(row){
+  return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
+}
+
+async function moveEmployee(employeeId, grid, pl){
   if (!Number.isInteger(grid) || grid < 1 || grid > 9) return;
+  if (pl === undefined) { const row = rows.find(item => item.id === employeeId); pl = performanceLevelForGrid(grid, row?.decision?.pl || row?.recommendedPl); if (pl === null) return; }
   $('#moveStatus').textContent = '正在调整落位…';
   const response = await fetch('/api/decision', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({employeeId, type:'direct', grid})
+    body: JSON.stringify({employeeId, type:'direct', grid, pl})
   });
   const data = await response.json();
   if (!response.ok) {
@@ -293,19 +368,67 @@ function dropTo(event, grid){
   if (employeeId) moveEmployee(employeeId, grid);
 }
 
-function chooseGrid(employeeId, current){
-  const value = window.prompt('请输入目标 Box（1-9）', String(current || 5));
-  if (value === null) return;
-  const grid = Number(value);
-  if (!Number.isInteger(grid) || grid < 1 || grid > 9) {
-    $('#moveStatus').textContent = '请输入 1-9 的 Box 编号';
-    return;
-  }
-  moveEmployee(employeeId, grid);
+function gridBoxFromLevels(pl, pot){
+  if (!pl || !pot) return null;
+  const group = pl >= 4 ? 'H' : pl === 3 ? 'M' : 'L';
+  return ({'H,3':1,'H,2':2,'H,1':4,'M,3':3,'M,2':5,'M,1':7,'L,3':6,'L,2':8,'L,1':9})[group + ',' + pot] || null;
 }
 
+function parsePlacementInput(value){
+  const text = String(value || '').trim().toUpperCase();
+  const plMatch = text.match(/PL\s*([1-5])|(?:^|[^A-Z])([1-5])\s*[,，/ ]/);
+  const potMatch = text.match(/POT\s*([1-3])|[,，/ ]\s*([1-3])(?:$|[^0-9])/);
+  const pl = Number(plMatch?.[1] || plMatch?.[2] || 0);
+  const pot = Number(potMatch?.[1] || potMatch?.[2] || 0);
+  if (!pl || !pot) return null;
+  const grid = gridBoxFromLevels(pl, pot);
+  return grid ? {pl, pot, grid} : null;
+}
+
+function defaultPlacementText(row, fallbackGrid){
+  const pl = row?.decision?.pl || row?.recommendedPl || '';
+  const grid = Number(row?.decision?.grid || row?.recommendedGrid || fallbackGrid || 0);
+  const pot = potentialForGrid(grid).replace('POT','');
+  return pl && pot ? 'PL' + pl + ',POT' + pot : '';
+}
+
+function chooseGrid(employeeId, current){
+  const row = rows.find(item => item.id === employeeId);
+  const value = window.prompt('请输入绩效和潜力，例如：PL4,POT2', defaultPlacementText(row, current));
+  if (value === null) return;
+  const placement = parsePlacementInput(value);
+  if (!placement) {
+    $('#moveStatus').textContent = '请输入有效的绩效和潜力，例如 PL4,POT2';
+    return;
+  }
+  moveEmployee(employeeId, placement.grid, placement.pl);
+}
+
+function membersOfBox(box){
+  return filteredRows().filter(row => placementGrid(row) === box);
+}
+
+function openBoxModal(box){
+  const members = membersOfBox(box);
+  $('#boxModalTitle').textContent = 'Box ' + box;
+  $('#boxModalCount').textContent = members.length + ' 人，点击姓名输入 PL/POT 调整落位';
+  $('#boxModalList').innerHTML = members.length ? members.map(row => '<button class="box-modal-person" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || box) + '); closeBoxModal();"><span>' + esc(row.name) + '</span></button>').join('') : '<div class="empty">这个 Box 暂时没有人员</div>';
+  $('#boxModal').hidden = false;
+  document.body.classList.add('modal-open');
+}
+
+function closeBoxModal(){
+  $('#boxModal').hidden = true;
+  document.body.classList.remove('modal-open');
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('#boxModal')?.hidden) closeBoxModal();
+});
+
 async function decide(employeeId, type, grid){
-  const body = type === 'direct' ? {employeeId, type, grid:Number(grid)} : {employeeId, type:'pending'};
+  let body = type === 'direct' ? {employeeId, type, grid:Number(grid)} : {employeeId, type:'pending'};
+  if (type === 'direct') { const row = rows.find(item => item.id === employeeId); const pl = performanceLevelForGrid(Number(grid), row?.decision?.pl || row?.recommendedPl); if (pl === null) return; body.pl = pl; }
   const response = await fetch('/api/decision', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -325,8 +448,8 @@ function renderGroup(){
   const reviewed = list.filter(row => row.count > 0);
   const recommended = list.filter(row => row.recommendedGrid);
   const adjusted = list.filter(row => row.decision?.type === 'direct');
-  const pending = list.filter(row => row.decision?.type === 'pending');
-  $('#filterHint').textContent = activeLevel ? '当前筛选：' + activeLevel : '全部员工';
+  const pending = list.filter(row => row.decision?.type === 'pending' || (row.decision?.type !== 'direct' && !row.recommendedGrid));
+  $('#filterHint').textContent = activeLevel ? '当前 Band：' + activeLevel : '全部员工';
   $('#detailCount').textContent = list.length + ' 人';
   const stats = [
     ['筛选员工', list.length, '人'],
@@ -338,10 +461,12 @@ function renderGroup(){
   ];
   $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
   updatePlacementAxisBands('.initial-ninebox', list);
+  $('#initialPendingCount').textContent = pending.length + ' 人';
+  $('#initialPendingList').innerHTML = pending.length ? pending.map(row => '<div class="pending-person" draggable="true" title="拖入 9-Box，或点击输入 PL/POT" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><span>' + esc(levelOf(row)) + ' · ' + (row.count || 0) + '票</span></div>').join('') : '<div class="empty">暂无待定人员</div>';
   $('#nineGrid').innerHTML = gridOrder.map(box => {
     const members = list.filter(row => placementGrid(row) === box);
-    return '<div class="nine-cell cell-' + box + '" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people initial-draggable-people">' +
-      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整 Box；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
+    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people initial-draggable-people">' +
+      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整 Box，点击输入 PL/POT；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
       '</div></div>';
   }).join('');
   $('#detail').innerHTML = list.map(row => '<tr>' +
@@ -355,6 +480,25 @@ function renderGroup(){
     '<td>' + esc((row.comments || []).join(' | ')) + '</td>' +
     '<td>' + esc(placementText(row)) + '</td>' +
   '</tr>').join('');
+}
+
+function applyHostCurrentEmployee(employee){
+  if (!followHost || !employee) return;
+  hostCurrentEmployeeId = employee.id || '';
+  activeLevel = '';
+  const list = currentPersonRows();
+  const index = list.findIndex(row => row.id === hostCurrentEmployeeId);
+  if (index >= 0) selectedPersonIndex = index;
+  mode = 'person';
+  render();
+}
+
+async function syncHostCurrent(){
+  if (!followHost) return;
+  try {
+    const state = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
+    applyHostCurrentEmployee(state.employee);
+  } catch {}
 }
 
 function renderPersonPicker(){
@@ -378,20 +522,24 @@ function renderPerson(){
     $('#personDecisionBar').innerHTML = '';
     return;
   }
-  const fields = Object.entries(row.fields || {}).filter(([, value]) => String(value ?? '').trim());
+  const normField = value => String(value || '').toLowerCase().replace(/[^a-z0-9一-龥]+/g, '');
+  const fieldValue = names => Object.entries(row.fields || {}).find(([key]) => names.map(normField).includes(normField(key)))?.[1] || '';
+  const baseKeys = new Set(['band','edsp2025','pl2025','pl2024']);
+  const fields = Object.entries(row.fields || {}).filter(([key, value]) => String(value ?? '').trim() && !baseKeys.has(normField(key)));
   const facts = [
-    ['员工编号', row.id],
-    ['部门', row.department],
-    ['岗位', row.role],
-    ['岗位级别', levelOf(row)]
+    ['Dept', row.department], ['Position', row.role],
+    ['Band', fieldValue(['Band','职级']) || levelOf(row)], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])],
+    ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
   ].filter(([, value]) => String(value ?? '').trim());
   $('#personProfile').innerHTML =
-    '<div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
-    '<h1>' + esc(row.name) + '</h1>' +
-    '<p>员工基本信息</p>' +
+    '<div class="profile-head"><div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
+    '<div class="profile-title"><span>Employee No</span><b>' + esc(row.id) + '</b><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
     '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="host-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
-    ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '');
+    ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '') +
+    '<div class="discussion-note-panel initial-person-notes"><div class="discussion-note-title">现场讨论记录</div><div class="discussion-note-grid">' +
+      discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-person-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
+    '</div><div class="discussion-note-status" id="personNoteStatus">自动保存</div></div>';
 
   const counts = row.gridCounts || boxes.map(() => 0);
   const max = Math.max(1, ...counts);
@@ -410,12 +558,43 @@ function renderPerson(){
     '</div>';
   }).join('');
   $('#personDecisionBar').innerHTML =
+    '<div><span>系统建议</span><b>' + esc(recommendationText(row)) + '</b></div>' +
     '<div><span>讨论结果</span><b>' + esc(placementText(row)) + '</b></div>' +
     '<div class="decision-controls current-decision">' +
       '<select id="personGridSelect">' + gridOptions(row) + '</select>' +
       '<button onclick="decide(\'' + encodeURIComponent(row.id) + '\',\'direct\',document.querySelector(\'#personGridSelect\').value)">直接落位</button>' +
       '<button class="secondary" onclick="decide(\'' + encodeURIComponent(row.id) + '\',\'pending\')">待定</button>' +
     '</div>';
+  wirePersonDiscussionNote(row);
+}
+
+function wirePersonDiscussionNote(row){
+  const inputs = [...document.querySelectorAll('[data-person-note-key]')];
+  const status = $('#personNoteStatus');
+  if (!row || !inputs.length) return;
+  let timer = null;
+  const collect = () => Object.fromEntries(inputs.map(input => [input.dataset.personNoteKey, input.value]));
+  const saveNote = async () => {
+    if (!status) return;
+    status.textContent = '保存中…';
+    const response = await fetch('/api/discussion-note', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({employeeId: row.id, note: collect()})
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      row.discussionNote = data.note || collect();
+      status.textContent = '已自动保存';
+    } else {
+      status.textContent = data.error || '保存失败';
+    }
+  };
+  inputs.forEach(input => input.addEventListener('input', () => {
+    if (status) status.textContent = '编辑中…';
+    clearTimeout(timer);
+    timer = setTimeout(saveNote, 650);
+  }));
 }
 
 function render(){
@@ -434,13 +613,48 @@ function openPerson(encodedId){
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
+async function setupMyVotesShare(){
+  const link = document.querySelector('#followInitialUrl');
+  const qr = document.querySelector('#followInitialQr');
+  if (!link || !qr) return;
+  let u;
+  try {
+    const q = await fetch('/api/qr', {cache:'no-store'}).then(r => r.json());
+    u = new URL(q.url);
+  } catch {
+    u = new URL(location.href);
+  }
+  u.pathname = '/initial-results.html';
+  u.hash = '';
+  u.searchParams.set('view','person');
+  u.searchParams.set('follow','1');
+  if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
+  else u.searchParams.delete('room');
+  link.textContent = u.toString();
+  link.href = u.toString();
+  qr.src = '/api/qr.svg?url=' + encodeURIComponent(u.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
+}
+
 async function load(){
+  await setupMyVotesShare();
   rows = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
+  if (followHost) {
+    try {
+      const state = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
+      if (state.employee) {
+        hostCurrentEmployeeId = state.employee.id || '';
+        const index = rows.findIndex(row => row.id === hostCurrentEmployeeId);
+        if (index >= 0) selectedPersonIndex = index;
+      }
+    } catch {}
+    mode = 'person';
+    activeLevel = '';
+  }
   render();
 }
 
 $('#modeGroup').onclick = () => { mode = 'group'; render(); };
-$('#modePerson').onclick = () => { mode = 'person'; render(); };
+$('#modePerson').onclick = () => { mode = 'person'; if (followHost) syncHostCurrent(); else render(); };
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; selectedPersonIndex = 0; render(); };
 $('#clearFilter').onclick = () => { activeLevel = ''; selectedPersonIndex = 0; render(); };
 $('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); };
@@ -475,7 +689,7 @@ if (initialVoteFile) {
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
-  ws.onmessage = event => { const message = JSON.parse(event.data); if (['results','employees'].includes(message.type)) load(); };
+  ws.onmessage = event => { const message = JSON.parse(event.data); if (followHost && (message.type === 'state' || message.type === 'current')) { applyHostCurrentEmployee(message.data?.employee); return; } if (['results','employees'].includes(message.type)) load(); };
   ws.onopen = () => $('#live').textContent = '数据实时更新';
   ws.onclose = () => { $('#live').textContent = '正在重新连接'; setTimeout(connect, 1200); };
 }

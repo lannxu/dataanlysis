@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>人才盘点 · 当场总览</title>
   <link rel="stylesheet" href="/styles.css">
+  <script defer src="/i18n.js"></script>
 </head>
 <body>
 <main class="shell summary-shell">
@@ -173,13 +174,39 @@ function draggedId(event){
   return encoded ? decodeURIComponent(encoded) : '';
 }
 
-async function moveEmployee(employeeId, grid){
+function performanceLevelForGrid(grid, currentPl){
+  grid = Number(grid);
+  const existing = Number(currentPl || 0);
+  if ([1,2,4].includes(grid)) {
+    const value = window.prompt('这个 Box 包含 PL4 和 PL5，请输入具体绩效：4 或 5', [4,5].includes(existing) ? String(existing) : '4');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![4,5].includes(pl)) { alert('请输入 4 或 5'); return null; }
+    return pl;
+  }
+  if ([6,8,9].includes(grid)) {
+    const value = window.prompt('这个 Box 包含 PL1 和 PL2，请输入具体绩效：1 或 2', [1,2].includes(existing) ? String(existing) : '2');
+    if (value === null) return null;
+    const pl = Number(value);
+    if (![1,2].includes(pl)) { alert('请输入 1 或 2'); return null; }
+    return pl;
+  }
+  if (grid === 3 || grid === 5 || grid === 7) return 3;
+  return null;
+}
+
+function decisionPlText(row){
+  return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
+}
+
+async function moveEmployee(employeeId, grid, pl){
   if (!Number.isInteger(grid) || grid < 1 || grid > 9) return;
+  if (pl === undefined) { pl = performanceLevelForGrid(grid); if (pl === null) return; }
   $('#moveStatus').textContent = '正在调整…';
   const response = await fetch('/api/decision', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({employeeId, type:'direct', grid})
+    body: JSON.stringify({employeeId, type:'direct', grid, pl})
   });
   const data = await response.json();
   $('#moveStatus').textContent = response.ok ? '已调整到 Box ' + grid : data.error;
@@ -281,7 +308,7 @@ function render(){
     '<td>' + groupedDistHtml(row, 'pot') + '</td>' +
     '<td>PL <b>' + (row.count ? row.avgPL.toFixed(2) : '—') + '</b><br>POT <b>' + (row.count ? row.avgPOT.toFixed(2) : '—') + '</b></td>' +
     '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + (row.recommendedGrid ? 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>' : '暂不推荐') + '</span></td>' +
-    '<td>' + (row.decision?.type === 'direct' ? '直接落位 · ' + 'Box ' + row.decision.grid : row.decision?.type === 'pending' ? '待定' : '未讨论') + '</td>' +
+    '<td>' + (row.decision?.type === 'direct' ? '直接落位 · Box ' + row.decision.grid + decisionPlText(row) : row.decision?.type === 'pending' ? '待定' : '未讨论') + '</td>' +
   '</tr>').join('');
 }
 

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>人才盘点 · 会前初评</title>
   <link rel="stylesheet" href="/styles.css">
+  <script defer src="/i18n.js"></script>
 </head>
 <body>
 <main class="shell pre-shell">
@@ -17,7 +18,9 @@
   </div>
 
   <section class="card pre-card">
-    <div class="pre-toolbar">
+    <div class="pre-toolbar pre-evaluator-toolbar">
+      <label>评估人</label>
+      <input id="evaluatorName" placeholder="请输入你的姓名或编号，用于覆盖自己的上次提交">
       <label>选择员工</label>
       <select id="employeeSelect"></select>
     </div>
@@ -30,26 +33,38 @@
     </div>
 
     <div class="dimension">
-      <h2>绩效等级</h2>
+      <h2>绩效等级（PL 2026）</h2>
       <div class="options" id="pl"></div>
     </div>
     <div class="dimension">
-      <h2>潜力等级</h2>
+      <h2>潜力等级（POT 2026）</h2>
       <div class="options pot" id="pot"></div>
     </div>
+    <div class="pre-box-preview" id="boxPreview">选择 PL 和 POT 后显示 Box</div>
 
-    <div class="dimension"><h2>Comments / 备注</h2><textarea class="comment-box" id="comment" placeholder="可填写评估理由、观察到的优势/风险、需要讨论的问题等（选填）"></textarea></div>
+    <div class="dimension"><h2>Comments / 备注</h2><div class="pre-comment-grid"><label><span>Strength</span><textarea class="comment-box" id="commentStrength" placeholder="优势、亮点、关键贡献（选填）"></textarea></label><label><span>Improvement Area</span><textarea class="comment-box" id="commentImprovement" placeholder="需要提升或进一步观察的方面（选填）"></textarea></label><label><span>Others</span><textarea class="comment-box" id="commentOthers" placeholder="其他补充、风险或需要讨论的问题（选填）"></textarea></label></div></div>
 
     <div class="pre-submit-row">
       <button class="submit" id="submit" disabled>提交这位员工的初评</button>
       <button class="secondary skip-btn" id="skipEmployee" type="button">Skip</button>
     </div>
-    <p class="muted pre-skip-tip">Skip 不会计入 PL/POT 票数，也不会影响系统推荐；只是记录为你已处理过此人。</p>
+    <p class="muted pre-skip-tip">同一评估人可以重复提交同一员工，系统只保留最后一次；Skip 不会计入 PL/POT 票数，也不会影响系统推荐。</p>
     <div class="pre-nav">
       <button class="secondary" id="prevEmployee">上一位</button>
       <button class="secondary" id="nextEmployee">下一位</button>
     </div>
     <div class="toast" id="toast"></div>
+  </section>
+
+  <section class="card pre-status-card">
+    <div class="section pre-status-head"><h2>我的评估状态</h2><span class="muted" id="preStatusSummary">--</span></div>
+    <div class="pre-status-filters" id="preStatusFilters">
+      <button class="active" type="button" data-filter="all">全部</button>
+      <button type="button" data-filter="done">已评</button>
+      <button type="button" data-filter="skip">Skip</button>
+      <button type="button" data-filter="open">未评</button>
+    </div>
+    <div class="pre-status-list" id="preStatusList"><div class="empty">正在加载</div></div>
   </section>
 </main>
 
@@ -70,8 +85,9 @@ let current = null;
 let pl = 0;
 let pot = 0;
 const handled = new Set();
+let statusFilter = 'all';
 
-function makeEvaluatorId(){
+function makeDeviceEvaluatorId(){
   let saved = '';
   try { saved = localStorage.getItem('preEvaluatorId') || localStorage.getItem('evaluatorId') || ''; } catch {}
   if (saved) return saved;
@@ -79,14 +95,53 @@ function makeEvaluatorId(){
   try { localStorage.setItem('preEvaluatorId', id); } catch {}
   return id;
 }
-const evaluatorId = makeEvaluatorId();
+const deviceEvaluatorId = makeDeviceEvaluatorId();
+function cleanEvaluatorName(){ return String($('#evaluatorName')?.value || '').trim(); }
+function currentEvaluatorId(){
+  const name = cleanEvaluatorName();
+  return name ? 'name:' + name.toLowerCase() : deviceEvaluatorId;
+}
+function restoreEvaluatorName(){
+  try { $('#evaluatorName').value = localStorage.getItem('preEvaluatorName') || ''; } catch {}
+}
+function saveEvaluatorName(){
+  try { localStorage.setItem('preEvaluatorName', cleanEvaluatorName()); } catch {}
+}
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+const fieldValue = (fields, names) => {
+  const entries = Object.entries(fields || {});
+  const norm = value => String(value || '').toLowerCase().replace(/[^a-z0-9一-龥]+/g, '');
+  const wanted = names.map(norm);
+  const hit = entries.find(([key]) => wanted.includes(norm(key)));
+  return hit ? hit[1] : '';
+};
 function renderFields(fields = {}){
   const el = $('#extraFields');
-  const entries = Object.entries(fields).filter(([,value]) => String(value ?? '').trim());
+  const standardLabels = ['Dept','Position','Band','EDSP 2025','PL 2025','PL 2024'];
+  const standardNorms = new Set(standardLabels.map(label => label.toLowerCase().replace(/[^a-z0-9]+/g, '')));
+  const base = [
+    ['Dept', current?.department], ['Position', current?.role],
+    ['Band', fieldValue(fields, ['Band','职级'])], ['EDSP 2025', fieldValue(fields, ['EDSP 2025','EDSP2025'])],
+    ['PL 2025', fieldValue(fields, ['PL 2025','PL2025'])], ['PL 2024', fieldValue(fields, ['PL 2024','PL2024'])]
+  ];
+  const extra = Object.entries(fields).filter(([label,value]) => String(value ?? '').trim() && !standardNorms.has(String(label).toLowerCase().replace(/[^a-z0-9]+/g, '')));
+  const entries = base.concat(extra).filter(([,value]) => String(value ?? '').trim());
   el.innerHTML = entries.map(([label,value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('');
   el.hidden = !entries.length;
+}
+
+function boxFromLevels(plValue, potValue){
+  if (!plValue || !potValue) return null;
+  const group = plValue >= 4 ? 'H' : plValue === 3 ? 'M' : 'L';
+  return ({'H,3':1,'H,2':2,'H,1':4,'M,3':3,'M,2':5,'M,1':7,'L,3':6,'L,2':8,'L,1':9})[group + ',' + potValue] || null;
+}
+function updateBoxPreview(){
+  const el = $('#boxPreview');
+  if (!el) return;
+  const box = boxFromLevels(pl, pot);
+  el.textContent = box ? ('当前选择：PL' + pl + ' / POT' + pot + ' → Box ' + box) : '选择 PL 和 POT 后显示 Box';
+  el.classList.toggle('active', !!box);
 }
 
 function optionButtons(id, total, prefix){
@@ -101,6 +156,7 @@ function optionButtons(id, total, prefix){
       if (id === '#pl') pl = i; else pot = i;
       [...el.children].forEach((x, index) => x.classList.toggle('active', index === i - 1));
       $('#submit').disabled = !(pl && pot && current);
+      updateBoxPreview();
     };
     el.appendChild(btn);
   }
@@ -108,9 +164,59 @@ function optionButtons(id, total, prefix){
 optionButtons('#pl', 5, 'PL');
 optionButtons('#pot', 3, 'POT');
 
+function normalizeVoteComment(comment){
+  if (comment && typeof comment === 'object') return {strength: comment.strength || '', improvementArea: comment.improvementArea || '', others: comment.others || ''};
+  return {strength: '', improvementArea: '', others: String(comment || '')};
+}
+function setComment(comment){
+  const c = normalizeVoteComment(comment);
+  $('#commentStrength').value = c.strength || '';
+  $('#commentImprovement').value = c.improvementArea || '';
+  $('#commentOthers').value = c.others || '';
+}
+function getComment(){
+  return {
+    strength: $('#commentStrength').value.trim(),
+    improvementArea: $('#commentImprovement').value.trim(),
+    others: $('#commentOthers').value.trim()
+  };
+}
+
+function statusText(row){
+  if (!row._myVote) return {label:'未评', cls:'open'};
+  if (row._myVote.skip) return {label:'Skip', cls:'skip'};
+  const box = boxFromLevels(row._myVote.pl, row._myVote.pot);
+  return {label:'已评 PL' + row._myVote.pl + ' / POT' + row._myVote.pot + (box ? ' · Box ' + box : ''), cls:'done'};
+}
+function renderStatusList(){
+  const done = employees.filter(e => e._myVote && !e._myVote.skip).length;
+  const skipped = employees.filter(e => e._myVote?.skip).length;
+  const open = Math.max(0, employees.length - done - skipped);
+  const summary = $('#preStatusSummary');
+  if (summary) summary.textContent = '已评 ' + done + ' · Skip ' + skipped + ' · 未评 ' + open;
+  document.querySelectorAll('#preStatusFilters button').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === statusFilter));
+  const list = $('#preStatusList');
+  if (!list) return;
+  const filtered = employees.map((row,index) => ({row,index,st:statusText(row)})).filter(item => statusFilter === 'all' || item.st.cls === statusFilter);
+  list.innerHTML = filtered.length ? filtered.map(({row,index,st}) => {
+    return '<button class="pre-status-item ' + st.cls + (index === currentIndex ? ' active' : '') + '" type="button" onclick="renderEmployee(' + index + ')"><span><b>' + esc(row.name) + '</b><small>' + esc([row.department,row.role].filter(Boolean).join(' · ')) + '</small></span><em>' + st.label + '</em></button>';
+  }).join('') : '<div class="empty">暂无符合条件的员工</div>';
+}
 function updateProgress(){
   const total = employees.length;
   $('#preProgress').textContent = total ? (currentIndex + 1) + ' / ' + total + ' · 已处理 ' + handled.size : '-- / --';
+  renderStatusList();
+}
+
+async function refreshAllMyVotes(){
+  if (!employees.length) return;
+  await Promise.all(employees.map(async employee => {
+    try { employee._myVote = await fetch('/api/my-vote?employeeId=' + encodeURIComponent(employee.id) + '&evaluatorId=' + encodeURIComponent(currentEvaluatorId()), {cache:'no-store'}).then(r => r.json()); }
+    catch { employee._myVote = null; }
+    if (employee._myVote) handled.add(employee.id); else handled.delete(employee.id);
+  }));
+  renderStatusList();
+  updateProgress();
 }
 
 async function loadMyVote(){
@@ -118,19 +224,21 @@ async function loadMyVote(){
   pot = 0;
   document.querySelectorAll('.choice').forEach(x => x.classList.remove('active'));
   $('#submit').disabled = true;
+  updateBoxPreview();
   $('#toast').textContent = '';
-  $('#comment').value = '';
+  setComment('');
   if (!current) return;
-  const vote = await fetch('/api/my-vote?employeeId=' + encodeURIComponent(current.id) + '&evaluatorId=' + encodeURIComponent(evaluatorId), {cache:'no-store'}).then(r => r.json());
+  const vote = await fetch('/api/my-vote?employeeId=' + encodeURIComponent(current.id) + '&evaluatorId=' + encodeURIComponent(currentEvaluatorId()), {cache:'no-store'}).then(r => r.json());
+  current._myVote = vote || null;
   if (vote) {
     handled.add(current.id);
     if (vote.skip) {
-      $('#comment').value = vote.comment || '';
+      setComment(vote.comment || '');
       $('#toast').textContent = '已 Skip；如需要，也可以重新选择 PL/POT 后提交评估';
     } else {
       document.querySelectorAll('#pl .choice')[vote.pl - 1]?.click();
       document.querySelectorAll('#pot .choice')[vote.pot - 1]?.click();
-      $('#comment').value = vote.comment || '';
+      setComment(vote.comment || '');
       $('#toast').textContent = '已提交过，可直接修改后再次提交';
     }
   }
@@ -147,7 +255,7 @@ async function renderEmployee(index){
   if (!current) return;
   $('#avatar').innerHTML = current.photo ? '<img src="' + current.photo + '" alt="' + esc(current.name) + '">' : esc((current.name || '人').slice(-1));
   $('#name').textContent = current.name;
-  $('#meta').textContent = [current.department, current.role].filter(Boolean).join(' · ') || '--';
+  $('#meta').textContent = current.id ? 'Employee No: ' + current.id : '--';
   renderFields(current.fields || {});
   await loadMyVote();
 }
@@ -155,6 +263,7 @@ async function renderEmployee(index){
 async function loadEmployees(){
   employees = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
   $('#employeeSelect').innerHTML = employees.map((e, index) => '<option value="' + index + '">' + (index + 1) + '. ' + esc(e.name) + '</option>').join('');
+  await refreshAllMyVotes();
   await renderEmployee(0);
 }
 
@@ -163,6 +272,9 @@ function goNextOrStay(){
   else updateProgress();
 }
 
+$('#evaluatorName').onchange = () => { saveEvaluatorName(); refreshAllMyVotes().then(() => loadMyVote()); };
+document.querySelectorAll('#preStatusFilters button').forEach(btn => btn.onclick = () => { statusFilter = btn.dataset.filter || 'all'; renderStatusList(); });
+$('#evaluatorName').oninput = () => { saveEvaluatorName(); };
 $('#employeeSelect').onchange = event => renderEmployee(Number(event.target.value));
 $('#prevEmployee').onclick = () => renderEmployee(currentIndex - 1);
 $('#nextEmployee').onclick = () => renderEmployee(currentIndex + 1);
@@ -171,13 +283,14 @@ $('#submit').onclick = async () => {
   const response = await fetch('/api/vote', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({evaluatorId, employeeId: current.id, pl, pot, comment: $('#comment').value.trim()})
+    body: JSON.stringify({evaluatorId: currentEvaluatorId(), evaluatorName: cleanEvaluatorName(), employeeId: current.id, pl, pot, comment: getComment()})
   });
   const data = await response.json();
   if (!response.ok) {
     $('#toast').textContent = data.error || '提交失败';
     return;
   }
+  current._myVote = {pl, pot, comment: getComment()};
   handled.add(current.id);
   $('#toast').textContent = '✓ 已提交：' + current.name;
   updateProgress();
@@ -188,23 +301,36 @@ $('#skipEmployee').onclick = async () => {
   const response = await fetch('/api/vote', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({evaluatorId, employeeId: current.id, skip: true, comment: $('#comment').value.trim()})
+    body: JSON.stringify({evaluatorId: currentEvaluatorId(), evaluatorName: cleanEvaluatorName(), employeeId: current.id, skip: true, comment: getComment()})
   });
   const data = await response.json();
   if (!response.ok) {
     $('#toast').textContent = data.error || 'Skip 失败';
     return;
   }
+  current._myVote = {skip:true, comment: getComment()};
   handled.add(current.id);
   $('#toast').textContent = '已 Skip：' + current.name;
   updateProgress();
   setTimeout(goNextOrStay, 350);
 };
 
+restoreEvaluatorName();
 loadEmployees().catch(() => {
   $('#name').textContent = '无法连接后台';
   $('#meta').textContent = '请稍后重试，或联系主持人';
 });
+</script>
+
+<script>
+(function(){
+  function connectPre(){
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + (roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : ''));
+    ws.onmessage = event => { const m = JSON.parse(event.data); if (['employees','results','state'].includes(m.type)) loadEmployees(); };
+    ws.onclose = () => setTimeout(connectPre, 1200);
+  }
+  connectPre();
+})();
 </script>
 </body>
 </html>
