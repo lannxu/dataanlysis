@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -45,7 +45,9 @@ async function loadRooms(){
   $('#roomsGrid').innerHTML = rooms.map(room => {
     const qr = '/api/qr.svg?room=' + encodeURIComponent(room.id);
     return '<article class="card room-card">' +
-      '<div class="room-card-head"><div><h2>' + esc(room.name) + '</h2><p class="muted">' + esc(room.id) + ' · ' + (room.total || 0) + ' 人</p></div><span>讨论区</span></div>' +
+      '<div class="room-card-head"><div><h2>' + esc(room.name) + '</h2><p class="muted">' + esc(room.id) + ' · ' + (room.total || 0) + ' 人</p></div>' +
+      '<div class="room-card-tools"><span>讨论区</span><div class="room-manage-actions"><button type="button" onclick="renameRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">更名</button>' +
+      (room.id === 'default' ? '' : '<button type="button" class="danger" onclick="deleteRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">删除</button>') + '</div></div></div>' +
       '<div class="room-card-body"><div class="room-qr-wrap"><img class="room-qr" src="' + qr + '" alt="' + esc(room.name) + ' 二维码"><span>现场扫码投票</span></div>' +
       '<div class="room-main-links"><a class="url" target="_blank" href="' + roomUrl('/index.html', room.id) + '">' + esc(abs('/index.html', room.id)) + '</a>' +
       '<div class="room-actions">' +
@@ -57,6 +59,25 @@ async function loadRooms(){
     '</article>';
   }).join('') || '<div class="card empty">暂无讨论区</div>';
 }
+async function renameRoom(id, currentName){
+  const entered = prompt('请输入新的讨论区名称', currentName);
+  if (entered === null) return;
+  const name = entered.trim();
+  if (!name || name === currentName) return;
+  const response = await fetch('/api/rooms/' + encodeURIComponent(id), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})});
+  const data = await response.json();
+  $('#roomMsg').textContent = response.ok ? '已更名为：' + data.name : data.error;
+  if (response.ok) await loadRooms();
+}
+
+async function deleteRoom(id, name){
+  if (!confirm('确定删除讨论区“' + name + '”吗？该讨论区的名单、评估和讨论结果都会永久删除。')) return;
+  const response = await fetch('/api/rooms/' + encodeURIComponent(id), {method:'DELETE'});
+  const data = await response.json();
+  $('#roomMsg').textContent = response.ok ? '已删除：' + name : data.error;
+  if (response.ok) await loadRooms();
+}
+
 $('#createRoom').onclick = async () => {
   const name = $('#roomName').value.trim();
   if (!name) { $('#roomMsg').textContent = '请输入讨论区名称'; return; }

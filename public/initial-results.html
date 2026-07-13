@@ -100,13 +100,49 @@
     </section>
   </section>
 
+  <section class="card initial-employee-card">
+    <div class="section">
+      <div>
+        <h2>员工名单</h2>
+        <p class="muted">可上传 Excel 或编辑基础四列。确认新名单后，当前讨论区的初评、讨论记录和落位结果会清空。</p>
+      </div>
+    </div>
+    <div class="upload-tools">
+      <a class="btn secondary-link" href="/employee-template.xlsx" download>下载 Excel 模板</a>
+      <label class="btn file-btn">上传 Excel 名单<input id="initialEmployeeFile" type="file" accept=".xlsx" hidden></label>
+      <span class="muted" id="initialEmployeeUploadStatus">上传后将读取并更新名单</span>
+    </div>
+    <textarea class="employees" id="initialEmployees" aria-label="员工名单"></textarea>
+    <div style="margin-top:12px"><button id="initialEmployeeSave">确认并保存名单</button> <span class="muted" id="initialEmployeeSaved"></span></div>
+  </section>
+
+  <section class="card pre-share-panel initial-pre-share">
+    <div>
+      <h2>会前初评入口</h2>
+      <p class="muted">将二维码或链接提前发给评估人，评估人可逐个员工提交初评。</p>
+      <a class="url" id="preUrl" target="_blank"></a>
+      <div class="pre-share-actions"><a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a></div>
+    </div>
+    <img id="preQr" alt="会前初评二维码">
+  </section>
+
+  <section class="card initial-import-card initial-progress-export">
+    <div>
+      <h2>实时下载初评进度</h2>
+      <p class="muted">按评估人导出每位员工的已评、Skip、未评状态，以及 PL、POT、Box 和提交时间。</p>
+    </div>
+    <div class="initial-import-actions">
+      <a class="btn" href="/api/export-initial.csv" download>下载初评进度 CSV</a>
+    </div>
+  </section>
+
   <section class="card initial-share-card">
     <div>
-      <h2>当前员工初评结果</h2>
-      <p class="muted">现场讨论时扫码查看当前员工的会前初评结果；主持后台切换上一位/下一位时，这里会实时跟随。</p>
+      <h2>我的当前员工初评</h2>
+      <p class="muted">扫码查询评估人本人对当前员工的会前初评；主持后台切换上一位/下一位时，这里会实时跟随。</p>
       <a class="url" id="followInitialUrl" target="_blank"></a>
     </div>
-    <img id="followInitialQr" alt="单人初评互动页二维码">
+    <img id="followInitialQr" alt="我的当前员工初评二维码">
   </section>
 
   <section class="card initial-import-card">
@@ -141,6 +177,7 @@ const roomSuffix = roomId && roomId !== 'default' ? '?room=' + encodeURIComponen
 const roomUrl = value => {
   const u = new URL(value, location.href);
   if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  if (['/api/results','/api/decision','/api/discussion-note'].includes(u.pathname)) u.searchParams.set('mode', 'initial');
   return u.pathname + u.search + u.hash;
 };
 const nativeFetch = window.fetch.bind(window);
@@ -163,6 +200,9 @@ const boxes = [1,2,3,4,5,6,7,8,9];
 const gridOrder = [6,3,1,8,5,2,9,7,4];
 const levelKeys = ['Band','band','BAND','岗位级别','职级','岗位等级','层级','Level','level','级别'];
 let rows = [];
+let initialEmployeePhotos = {};
+let initialEmployeeFields = {};
+const initialEmployeeKey = employee => String(employee?.employeeNo || employee?.id || '') + '\u0000' + String(employee?.name || '');
 let activeLevel = '';
 const viewModeParam = new URLSearchParams(location.search).get('view') || new URLSearchParams(location.search).get('mode') || '';
 const followHost = ['1','true','yes','host'].includes(String(new URLSearchParams(location.search).get('follow') || '').toLowerCase());
@@ -531,12 +571,21 @@ function renderPerson(){
     ['Band', fieldValue(['Band','职级']) || levelOf(row)], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])],
     ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
   ].filter(([, value]) => String(value ?? '').trim());
+  const voteDetails = Array.isArray(row.voteDetails) ? row.voteDetails : [];
+  const voteDetailHtml = '<div class="initial-comments initial-vote-details"><small>全部会前初评记录</small>' +
+    (voteDetails.length ? voteDetails.map((vote, index) => {
+      const result = vote.skip ? 'Skip' : ('PL' + (vote.pl || '-') + ' / POT' + (vote.pot || '-') + (vote.grid ? ' · Box ' + vote.grid : ''));
+      const comment = vote.comment || '';
+      return '<div class="initial-vote-row"><div><b>' + esc(vote.evaluator || ('评估人 ' + (index + 1))) + '</b><span>' + esc(result) + '</span></div>' + (comment ? '<p>' + esc(comment) + '</p>' : '') + '</div>';
+    }).join('') : '<p><em>暂无初评记录</em></p>') +
+  '</div>';
   $('#personProfile').innerHTML =
     '<div class="profile-head"><div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
-    '<div class="profile-title"><span>Employee No</span><b>' + esc(row.id) + '</b><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
+    '<div class="profile-title"><span>Employee No</span><b>' + esc(row.employeeNo || row.id) + '</b><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
     '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="host-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
     ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '') +
+    voteDetailHtml +
     '<div class="discussion-note-panel initial-person-notes"><div class="discussion-note-title">现场讨论记录</div><div class="discussion-note-grid">' +
       discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-person-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
     '</div><div class="discussion-note-status" id="personNoteStatus">自动保存</div></div>';
@@ -624,9 +673,9 @@ async function setupMyVotesShare(){
   } catch {
     u = new URL(location.href);
   }
-  u.pathname = '/initial-results.html';
+  u.pathname = '/my-votes.html';
+  u.search = '';
   u.hash = '';
-  u.searchParams.set('view','person');
   u.searchParams.set('follow','1');
   if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
   else u.searchParams.delete('room');
@@ -638,6 +687,10 @@ async function setupMyVotesShare(){
 async function load(){
   await setupMyVotesShare();
   rows = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
+  initialEmployeePhotos = Object.fromEntries(rows.filter(row => row.photo).map(row => [initialEmployeeKey(row), row.photo]));
+  initialEmployeeFields = Object.fromEntries(rows.map(row => [initialEmployeeKey(row), row.fields || {}]));
+  const employeeEditor = document.querySelector('#initialEmployees');
+  if (employeeEditor && document.activeElement !== employeeEditor) employeeEditor.value = rows.map(row => [row.employeeNo || row.id, row.name, row.department, row.role].join(',')).join('\n');
   if (followHost) {
     try {
       const state = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
@@ -660,6 +713,75 @@ $('#clearFilter').onclick = () => { activeLevel = ''; selectedPersonIndex = 0; r
 $('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); };
 $('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); };
 $('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); };
+
+async function setupPreShare(){
+  const link = document.querySelector('#preUrl');
+  const qr = document.querySelector('#preQr');
+  if (!link || !qr) return;
+  let u;
+  try {
+    const q = await fetch('/api/qr', {cache:'no-store'}).then(r => r.json());
+    u = new URL(q.url);
+  } catch {
+    u = new URL(location.href);
+  }
+  u.pathname = '/pre.html';
+  u.search = '';
+  if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
+  u.hash = '';
+  link.textContent = u.toString();
+  link.href = u.toString();
+  qr.src = '/api/qr.svg?url=' + encodeURIComponent(u.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
+}
+
+async function saveInitialEmployeeList(employees, successMessage){
+  const response = await fetch('/api/employees', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({employees})});
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = {error:text}; }
+  const message = response.ok ? (successMessage || ('已保存 ' + data.total + ' 名员工，旧评估数据已清空')) : (data.error || '保存失败');
+  document.querySelector('#initialEmployeeSaved').textContent = message;
+  document.querySelector('#initialEmployeeUploadStatus').textContent = message;
+  if (!response.ok) return false;
+  await load();
+  return true;
+}
+
+const initialEmployeeFile = document.querySelector('#initialEmployeeFile');
+if (initialEmployeeFile) {
+  initialEmployeeFile.onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const status = document.querySelector('#initialEmployeeUploadStatus');
+    status.textContent = '正在读取名单…';
+    try {
+      const response = await fetch('/api/import-employees', {method:'POST', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:file});
+      const data = await response.json();
+      if (!response.ok) { status.textContent = data.error || '读取失败'; return; }
+      document.querySelector('#initialEmployees').value = data.employees.map(employee => [employee.id, employee.name, employee.department, employee.role].join(',')).join('\n');
+      status.textContent = '已读取 ' + data.count + ' 名员工，正在保存…';
+      await saveInitialEmployeeList(data.employees, '已更新 ' + data.count + ' 名员工，旧评估数据已清空');
+    } catch (error) {
+      status.textContent = '上传失败：' + (error.message || error);
+    } finally {
+      event.target.value = '';
+    }
+  };
+}
+
+const initialEmployeeSave = document.querySelector('#initialEmployeeSave');
+if (initialEmployeeSave) {
+  initialEmployeeSave.onclick = async () => {
+    const lines = document.querySelector('#initialEmployees').value.split('\n').map(line => line.trim()).filter(Boolean);
+    const employees = lines.map(line => {
+      const [id, name, department, role] = line.split(/[,，\t]/).map(value => value.trim());
+      const key = initialEmployeeKey({id, name});
+      return {id, name, department, role, photo:initialEmployeePhotos[key] || '', fields:initialEmployeeFields[key] || {}};
+    });
+    document.querySelector('#initialEmployeeSaved').textContent = '正在保存…';
+    await saveInitialEmployeeList(employees);
+  };
+}
 
 const initialVoteFile = document.querySelector('#initialVoteFile');
 if (initialVoteFile) {
@@ -686,6 +808,7 @@ if (initialVoteFile) {
   };
 }
 
+setupPreShare();
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);

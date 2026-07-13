@@ -22,8 +22,8 @@
 
   <section class="card initial-filter-card summary-filter-card">
     <div>
-      <h2>按岗位级别筛选</h2>
-      <p class="muted">优先识别 Excel 字段：岗位级别、职级、岗位等级、层级、Level；没有这些字段时按岗位筛选。</p>
+      <h2>按 Band 筛选</h2>
+      <p class="muted">筛选字段固定读取员工 Excel 中的 Band 列。</p>
     </div>
     <div class="initial-filter-controls">
       <select id="levelFilter"></select>
@@ -111,7 +111,7 @@ const $ = s => document.querySelector(s);
 const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const gridOrder = [6,3,1,8,5,2,9,7,4];
-const levelKeys = ['岗位级别','职级','岗位等级','层级','Level','level','级别'];
+const levelKeys = ['Band','band','BAND'];
 let rows = [];
 let activeLevel = '';
 let searchQuery = '';
@@ -146,13 +146,13 @@ function updateFinalAxisBands(scope, direct, totalRows){
 
 function levelOf(row){
   const fields = row.fields || {};
-  const key = levelKeys.find(name => String(fields[name] ?? '').trim());
-  return key ? String(fields[key]).trim() : (row.role || '未填写');
+  const entry = Object.entries(fields).find(([key,value]) => key.trim().toLowerCase() === 'band' && String(value ?? '').trim());
+  return entry ? String(entry[1]).trim() : '';
 }
 
 function searchableText(row){
   const fields = row.fields || {};
-  return [row.name, row.department, row.role, levelOf(row), row.id, ...Object.values(fields)].map(value => String(value ?? '').toLowerCase()).join(' ');
+  return [row.name, row.department, row.role, levelOf(row), row.employeeNo || row.id, ...Object.values(fields)].map(value => String(value ?? '').toLowerCase()).join(' ');
 }
 
 function filteredRows(){

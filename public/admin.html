@@ -21,8 +21,8 @@
       <span class="review-progress" id="reviewProgress">已评估 -- 人 · 未评估 -- 人</span>
       <button id="next">下一位</button>
       <a class="btn secondary-link" href="/home.html">讨论区首页</a>
-      <a class="btn secondary-link" href="/initial-results.html">初评结果</a>
       <a class="btn secondary-link" href="/summary.html">当场总览</a>
+      <a class="btn secondary-link" href="/initial-results.html">初评结果</a>
       <a class="btn" href="/api/export.csv">导出 CSV</a>
     </div>
   </header>
@@ -40,12 +40,7 @@
         </div>
         <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需要连接同一 Wi-Fi。</div>
       </details>
-      <div class="current-initial-share">
-        <h3>当前员工初评结果</h3>
-        <img id="currentInitialQr" alt="当前员工初评结果二维码">
-        <a class="url" id="currentInitialUrl" target="_blank"></a>
-      </div>
-    </aside>
+      </aside>
 
     <section class="card stage-profile-card">
       <div class="section"><h2>员工基本信息</h2></div>
@@ -68,16 +63,7 @@
   <div id="decisionMsg" class="toast stage-toast"></div>
 
   <details class="card admin-tools-panel">
-    <summary>会前初评链接 / 初评结果 / 名单管理 / 上传 Excel / 查看落位区</summary>
-    <section class="pre-share-panel">
-      <div>
-        <h2>会前初评入口</h2>
-        <p class="muted">可以把这个二维码或链接提前发给评估人，评估人可自行逐个员工提交初评。</p>
-        <a class="url" id="preUrl" target="_blank"></a>
-        <div class="pre-share-actions"><a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a><a class="btn secondary-link" href="/initial-results.html">查看初评结果</a></div>
-      </div>
-      <img id="preQr" alt="会前初评二维码">
-    </section>
+    <summary>初评结果 / 名单管理 / 上传 Excel / 查看落位区</summary>
     <div class="decision-grid compact-zones">
       <section class="zone direct">
         <div class="section"><h2>直接落位区</h2><span class="muted" id="directCount">0 人</span></div>
@@ -136,6 +122,7 @@ let state = null;
 let resultRows = [];
 let uploadedPhotos = {};
 let uploadedFields = {};
+const employeeAssetKey = employee => String(employee?.employeeNo || employee?.id || '') + '\u0000' + String(employee?.name || '');
 let noteSaveTimer = null;
 let noteSavingFor = null;
 const discussionNoteFields = [
@@ -154,8 +141,11 @@ const pct = (value,total) => total ? Math.round(value / total * 100) + '%' : '0%
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function currentResult(){
-  const id = state?.employee?.id;
-  return resultRows.find(row => row.id === id) || null;
+  const index = Number(state?.currentIndex);
+  const indexed = Number.isInteger(index) ? resultRows[index] : null;
+  if (indexed && (!state?.employee || (indexed.id === state.employee.id && indexed.name === state.employee.name))) return indexed;
+  const id = state?.employee?.id, name = state?.employee?.name;
+  return resultRows.find(row => row.id === id && row.name === name) || resultRows.find(row => row.id === id) || null;
 }
 
 function performanceLevelForGrid(grid, currentPl){
@@ -263,7 +253,7 @@ function renderReviewProgress(){
 }
 
 function renderCurrentViews(){
-  const row = currentResult();
+  const row = currentResult() || (state?.employee ? {...state.employee, count:0, gridCounts:Array(9).fill(0), plCounts:Array(5).fill(0), potCounts:Array(3).fill(0), decision:null, discussionNote:{}} : null);
   const e = row || state?.employee;
   if (!e) {
     $('#stageProfile').innerHTML = '<div class="empty">No employee</div>';
@@ -285,7 +275,7 @@ function renderCurrentViews(){
   ].filter(([, value]) => String(value ?? '').trim());
   $('#stageProfile').innerHTML =
     '<div class="profile-head"><div class="stage-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
-    '<div class="profile-title"><span>Employee No</span><b>' + esc(e.id) + '</b><span>Name</span><h1>' + esc(e.name) + '</h1></div></div>' +
+    '<div class="profile-title"><span>Employee No</span><b>' + esc(e.employeeNo || e.id) + '</b><span>Name</span><h1>' + esc(e.name) + '</h1></div></div>' +
     '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="stage-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
     '<div class="discussion-note-panel"><div class="discussion-note-title">Discussion Notes</div><div class="discussion-note-grid">' +
@@ -398,9 +388,9 @@ async function loadState(){
 
 async function loadResults(){
   resultRows = await fetch('/api/results').then(r => r.json());
-  uploadedPhotos = Object.fromEntries(resultRows.filter(r => r.photo).map(r => [r.id, r.photo]));
-  uploadedFields = Object.fromEntries(resultRows.map(r => [r.id, r.fields || {}]));
-  $('#employees').value = resultRows.map(r => [r.id, r.name, r.department, r.role].join(',')).join('\n');
+  uploadedPhotos = Object.fromEntries(resultRows.filter(r => r.photo).map(r => [employeeAssetKey(r), r.photo]));
+  uploadedFields = Object.fromEntries(resultRows.map(r => [employeeAssetKey(r), r.fields || {}]));
+  $('#employees').value = resultRows.map(r => [r.employeeNo || r.id, r.name, r.department, r.role].join(',')).join('\n');
   renderEmployeePicker();
   renderReviewProgress();
   renderZones(resultRows);
@@ -443,8 +433,8 @@ $('#employeeFile').onchange = async event => {
     const response = await fetch('/api/import-employees', {method:'POST', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:file});
     const data = await response.json();
     if (!response.ok) { $('#uploadStatus').textContent = data.error || '读取失败'; return; }
-    uploadedPhotos = Object.fromEntries(data.employees.filter(e => e.photo).map(e => [e.id, e.photo]));
-    uploadedFields = Object.fromEntries(data.employees.map(e => [e.id, e.fields || {}]));
+    uploadedPhotos = Object.fromEntries(data.employees.filter(e => e.photo).map(e => [employeeAssetKey(e), e.photo]));
+    uploadedFields = Object.fromEntries(data.employees.map(e => [employeeAssetKey(e), e.fields || {}]));
     $('#employees').value = data.employees.map(e => [e.id, e.name, e.department, e.role].join(',')).join('\n');
     $('#uploadStatus').textContent = '已读取 ' + data.count + ' 名员工，正在保存到系统...';
     await saveEmployeeList(data.employees, '已更新 ' + data.count + ' 名员工，基础信息已同步。');
@@ -473,7 +463,8 @@ $('#save').onclick = async () => {
   const lines = $('#employees').value.split('\n').filter(Boolean);
   const employees = lines.map(line => {
     const [id, name, department, role] = line.split(/[,，\t]/).map(x => x.trim());
-    return {id, name, department, role, photo: uploadedPhotos[id] || '', fields: uploadedFields[id] || {}};
+    const key = employeeAssetKey({id, name});
+    return {id, name, department, role, photo: uploadedPhotos[key] || '', fields: uploadedFields[key] || {}};
   });
   $('#saved').textContent = '正在保存...';
   await saveEmployeeList(employees);
@@ -487,36 +478,10 @@ async function loadQr(custom = ''){
   $('#qr').src = q.svgUrl + '&v=' + Date.now();
 }
 
-async function loadPreQr(){
-  const q = await fetch('/api/qr').then(r => r.json());
-  const preUrl = new URL(q.url);
-  preUrl.pathname = '/pre.html';
-  preUrl.search = '';
-  if (roomId && roomId !== 'default') preUrl.searchParams.set('room', roomId);
-  preUrl.hash = '';
-  $('#preUrl').textContent = preUrl.toString();
-  $('#preUrl').href = preUrl.toString();
-  $('#preQr').src = '/api/qr.svg?url=' + encodeURIComponent(preUrl.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
-}
 
-async function loadCurrentInitialQr(){
-  const q = await fetch('/api/qr').then(r => r.json());
-  const u = new URL(q.url);
-  u.pathname = '/initial-results.html';
-  u.search = '';
-  u.searchParams.set('view', 'person');
-  u.searchParams.set('follow', '1');
-  if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
-  u.hash = '';
-  $('#currentInitialUrl').textContent = u.toString();
-  $('#currentInitialUrl').href = u.toString();
-  $('#currentInitialQr').src = '/api/qr.svg?url=' + encodeURIComponent(u.toString()) + (roomId && roomId !== 'default' ? '&room=' + encodeURIComponent(roomId) : '') + '&v=' + Date.now();
-}
 
 $('#refreshQr').onclick = () => loadQr($('#qrAddress').value.trim());
 loadQr();
-loadPreQr();
-loadCurrentInitialQr();
 loadState();
 loadResults();
 

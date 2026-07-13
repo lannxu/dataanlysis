@@ -236,3 +236,23 @@
 
 /* Host QR for current employee initial results */
 .current-initial-share{margin-top:14px;border-top:1px solid #e7ebf2;padding-top:12px;text-align:center}.current-initial-share h3{margin:0 0 8px;font-size:14px}.current-initial-share img{width:min(150px,100%);background:#fff;border:1px solid #e7ebf2;border-radius:12px;padding:7px}.current-initial-share .url{display:block;margin-top:6px;color:#2457e6;text-decoration:none;word-break:break-all;font-size:11px;line-height:1.35}@media(max-width:1120px){.current-initial-share{grid-column:1/-1;display:grid;grid-template-columns:104px minmax(0,1fr);gap:6px;text-align:left;align-items:center;margin-top:4px;padding-top:6px}.current-initial-share h3{grid-column:1/-1;margin:0}.current-initial-share img{width:100px}.current-initial-share .url{margin-top:0}}
+
+.initial-vote-details{display:grid;gap:8px}.initial-vote-row{display:grid;gap:6px;border-top:1px solid #e7ebf2;padding-top:8px}.initial-vote-row:first-of-type{border-top:0;padding-top:0}.initial-vote-row>div{display:flex;justify-content:space-between;gap:12px;align-items:center}.initial-vote-row b{color:#172034}.initial-vote-row span{font-weight:800;color:#2457e6;white-space:nowrap}.initial-vote-row p{margin:0;color:#536078}
+
+
+/* Initial results administration tools */
+.initial-employee-card{margin-top:18px}
+.initial-employee-card .section{align-items:flex-start}
+.initial-employee-card .section h2{margin-bottom:6px}
+.initial-employee-card .section p{margin:0}
+.initial-pre-share{margin:18px 0 0}
+.initial-progress-export{margin-top:18px}
+
+
+/* Discussion room management */
+.room-card-tools{display:grid;justify-items:end;gap:8px}
+.room-manage-actions{display:flex;gap:6px}
+.room-manage-actions button{border:1px solid #dfe5ef;border-radius:8px;background:#fff;color:#536078;padding:7px 9px;font-size:12px}
+.room-manage-actions button:hover{border-color:#2457e6;color:#2457e6;background:#f5f8ff}
+.room-manage-actions button.danger{border-color:#f1c8cc;color:#c93645;background:#fff8f8}
+.room-manage-actions button.danger:hover{border-color:#c93645;background:#fff0f1}

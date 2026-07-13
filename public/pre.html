@@ -255,7 +255,7 @@ async function renderEmployee(index){
   if (!current) return;
   $('#avatar').innerHTML = current.photo ? '<img src="' + current.photo + '" alt="' + esc(current.name) + '">' : esc((current.name || '人').slice(-1));
   $('#name').textContent = current.name;
-  $('#meta').textContent = current.id ? 'Employee No: ' + current.id : '--';
+  $('#meta').textContent = current.id ? 'Employee No: ' + (current.employeeNo || current.id) : '--';
   renderFields(current.fields || {});
   await loadMyVote();
 }
