@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -139,7 +139,7 @@
   <section class="card initial-share-card">
     <div>
       <h2>我的当前员工初评</h2>
-      <p class="muted">扫码查询评估人本人对当前员工的会前初评；主持后台切换上一位/下一位时，这里会实时跟随。</p>
+      <p class="muted">扫码查询评估人本人对当前员工的会前初评；初评结果单人页面切换员工时，这里会实时跟随。</p>
       <a class="url" id="followInitialUrl" target="_blank"></a>
     </div>
     <img id="followInitialQr" alt="我的当前员工初评二维码">
@@ -489,6 +489,7 @@ function renderGroup(){
   const recommended = list.filter(row => row.recommendedGrid);
   const adjusted = list.filter(row => row.decision?.type === 'direct');
   const pending = list.filter(row => row.decision?.type === 'pending' || (row.decision?.type !== 'direct' && !row.recommendedGrid));
+  const box123 = list.filter(row => row.decision?.type !== 'pending' && [1,2,3].includes(Number(placementGrid(row)))).length;
   $('#filterHint').textContent = activeLevel ? '当前 Band：' + activeLevel : '全部员工';
   $('#detailCount').textContent = list.length + ' 人';
   const stats = [
@@ -497,7 +498,8 @@ function renderGroup(){
     ['累计投票', list.reduce((sum,row) => sum + row.count, 0), '票'],
     ['有系统推荐', recommended.length, '人'],
     ['已手动调整', adjusted.length, '人'],
-    ['待定', pending.length, '人']
+    ['待定', pending.length, '人'],
+    ['Box 1/2/3 整体比例', pct(box123, list.length), box123 + '/' + list.length + ' 人']
   ];
   $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
   updatePlacementAxisBands('.initial-ninebox', list);
@@ -564,13 +566,13 @@ function renderPerson(){
   }
   const normField = value => String(value || '').toLowerCase().replace(/[^a-z0-9一-龥]+/g, '');
   const fieldValue = names => Object.entries(row.fields || {}).find(([key]) => names.map(normField).includes(normField(key)))?.[1] || '';
-  const baseKeys = new Set(['band','edsp2025','pl2025','pl2024']);
+  const baseKeys = new Set(['band','edsp2025','edsp2024','pl2025','pl2024']);
   const fields = Object.entries(row.fields || {}).filter(([key, value]) => String(value ?? '').trim() && !baseKeys.has(normField(key)));
   const facts = [
-    ['Dept', row.department], ['Position', row.role],
-    ['Band', fieldValue(['Band','职级']) || levelOf(row)], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])],
+    ['Employee No', row.employeeNo || row.id], ['Dept', row.department], ['Position', row.role],
+    ['Band', fieldValue(['Band','职级']) || levelOf(row)], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])], ['EDSP 2024', fieldValue(['EDSP 2024','EDSP2024'])],
     ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
-  ].filter(([, value]) => String(value ?? '').trim());
+  ];
   const voteDetails = Array.isArray(row.voteDetails) ? row.voteDetails : [];
   const voteDetailHtml = '<div class="initial-comments initial-vote-details"><small>全部会前初评记录</small>' +
     (voteDetails.length ? voteDetails.map((vote, index) => {
@@ -581,8 +583,8 @@ function renderPerson(){
   '</div>';
   $('#personProfile').innerHTML =
     '<div class="profile-head"><div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
-    '<div class="profile-title"><span>Employee No</span><b>' + esc(row.employeeNo || row.id) + '</b><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
-    '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
+    '<div class="profile-title"><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
+    '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(String(value ?? '').trim() || '--') + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="host-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
     ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '') +
     voteDetailHtml +
@@ -600,7 +602,7 @@ function renderPerson(){
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + '票 · ' + pct(count, row.count) + '</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
@@ -659,7 +661,18 @@ function openPerson(encodedId){
   selectedPersonIndex = Math.max(0, index);
   mode = 'person';
   render();
+  updateInitialCurrent();
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function updateInitialCurrent(){
+  const employee = currentPerson();
+  if (!employee) return;
+  fetch('/api/initial-current', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({employeeId:employee.id})
+  }).catch(() => {});
 }
 
 async function setupMyVotesShare(){
@@ -676,7 +689,7 @@ async function setupMyVotesShare(){
   u.pathname = '/my-votes.html';
   u.search = '';
   u.hash = '';
-  u.searchParams.set('follow','1');
+  u.searchParams.set('follow','initial');
   if (roomId && roomId !== 'default') u.searchParams.set('room', roomId);
   else u.searchParams.delete('room');
   link.textContent = u.toString();
@@ -702,17 +715,23 @@ async function load(){
     } catch {}
     mode = 'person';
     activeLevel = '';
+  } else {
+    try {
+      const initialState = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
+      const index = rows.findIndex(row => row.id === initialState.employee?.id);
+      if (index >= 0) selectedPersonIndex = index;
+    } catch {}
   }
   render();
 }
 
 $('#modeGroup').onclick = () => { mode = 'group'; render(); };
-$('#modePerson').onclick = () => { mode = 'person'; if (followHost) syncHostCurrent(); else render(); };
+$('#modePerson').onclick = () => { mode = 'person'; if (followHost) syncHostCurrent(); else { render(); updateInitialCurrent(); } };
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; selectedPersonIndex = 0; render(); };
 $('#clearFilter').onclick = () => { activeLevel = ''; selectedPersonIndex = 0; render(); };
-$('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); };
-$('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); };
-$('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); };
+$('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); updateInitialCurrent(); };
+$('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); updateInitialCurrent(); };
+$('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); updateInitialCurrent(); };
 
 async function setupPreShare(){
   const link = document.querySelector('#preUrl');

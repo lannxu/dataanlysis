@@ -17,7 +17,7 @@
   </div>
 
   <section class="card my-current-vote-card">
-    <div class="section"><h2>当前被讨论人</h2><span class="muted" id="currentStatus">跟随主持后台实时更新</span></div>
+    <div class="section"><h2>初评结果当前员工</h2><span class="muted" id="currentStatus">跟随初评结果单人页面实时更新</span></div>
     <div id="currentVoteView"><div class="empty">请输入评估人姓名或编号后查看</div></div>
   </section>
 
@@ -99,7 +99,7 @@ function render(items){
 }
 async function loadState(){
   try {
-    const data = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
+    const data = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
     currentEmployee = data.employee || null;
     renderCurrent();
   } catch {
@@ -137,12 +137,12 @@ function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
   ws.onmessage = event => {
     const message = JSON.parse(event.data);
-    if (message.type === 'state' || message.type === 'current') applyStateMessage(message);
+    if (message.type === 'initial-current') applyStateMessage(message);
     if (message.type === 'results' || message.type === 'employees') {
       if ($('#evaluatorName').value.trim() || deviceEvaluatorId()) loadVotes(); else loadState();
     }
   };
-  ws.onopen = () => { $('#currentStatus').textContent = '已连接，跟随主持后台实时更新'; };
+  ws.onopen = () => { $('#currentStatus').textContent = '已连接，跟随初评结果单人页面实时更新'; };
   ws.onclose = () => { $('#currentStatus').textContent = '正在重新连接，同步会自动恢复'; setTimeout(connect, 1200); };
 }
 

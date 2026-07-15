@@ -28,19 +28,6 @@
   </header>
 
   <section class="stage-board">
-    <aside class="card stage-qr-card">
-      <div class="section"><h2>扫码加入</h2></div>
-      <img id="qr" alt="手机评估二维码">
-      <a class="url" id="url" target="_blank"></a>
-      <details class="qr-more">
-        <summary>修改二维码地址</summary>
-        <div class="qr-edit">
-          <input id="qrAddress" aria-label="手机访问地址">
-          <button id="refreshQr">重新生成</button>
-        </div>
-        <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需要连接同一 Wi-Fi。</div>
-      </details>
-      </aside>
 
     <section class="card stage-profile-card">
       <div class="section"><h2>员工基本信息</h2></div>
@@ -57,6 +44,20 @@
       </div>
       <div class="stage-ninebox"><div class="axis-y axis-y-bands"><span>POT3</span><span>POT2</span><span>POT1</span></div><div class="stage-nine-grid" id="hostNineGrid"></div><div class="axis-x axis-x-bands"><span>PL1-2</span><span>PL3</span><span>PL4-5</span></div></div>
       <div class="stage-decision" id="hostDecisionBar"></div>
+
+    </section>
+    <section class="stage-qr-card stage-qr-inline">
+      <div class="section"><h2>扫码加入</h2></div>
+      <img id="qr" alt="手机评估二维码">
+      <a class="url" id="url" target="_blank"></a>
+      <details class="qr-more">
+        <summary>修改二维码地址</summary>
+        <div class="qr-edit">
+          <input id="qrAddress" aria-label="手机访问地址">
+          <button id="refreshQr">重新生成</button>
+        </div>
+        <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需要连接同一 Wi-Fi。</div>
+      </details>
     </section>
   </section>
 
@@ -173,6 +174,8 @@ function decisionPlText(row){
   return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
 }
 
+function uiText(zh, en){ return window.talentI18n?.getLang?.() === 'en' ? en : zh; }
+
 function decisionText(row){
   if (!row?.decision) return 'Not discussed';
   if (row.decision.type === 'pending') return 'Pending';
@@ -180,8 +183,8 @@ function decisionText(row){
 }
 
 function recommendationText(row){
-  if (!row?.recommendedGrid) return 'No recommendation';
-  return 'Recommended Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + ' consensus';
+  if (!row?.recommendedGrid) return uiText('\u7cfb\u7edf\u5efa\u8bae\uff1a\u6682\u65e0', 'No recommendation');
+  return uiText('Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + ' \u5171\u8bc6', 'Recommended Box ' + row.recommendedGrid + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + ' consensus');
 }
 
 function gridOptions(row){
@@ -266,17 +269,17 @@ function renderCurrentViews(){
   }
   const normField = value => String(value || '').toLowerCase().replace(/[^a-z0-9一-龥]+/g, '');
   const fieldValue = names => Object.entries(e.fields || {}).find(([key]) => names.map(normField).includes(normField(key)))?.[1] || '';
-  const baseKeys = new Set(['band','edsp2025','pl2025','pl2024']);
+  const baseKeys = new Set(['band','edsp2025','edsp2024','pl2025','pl2024']);
   const fields = Object.entries(e.fields || {}).filter(([key, value]) => String(value ?? '').trim() && !baseKeys.has(normField(key)));
   const basicInfo = [
-    ['Dept', e.department], ['Position', e.role],
-    ['Band', fieldValue(['Band','职级'])], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])],
+    ['Employee No', e.employeeNo || e.id], ['Dept', e.department], ['Position', e.role],
+    ['Band', fieldValue(['Band','职级'])], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])], ['EDSP 2024', fieldValue(['EDSP 2024','EDSP2024'])],
     ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
-  ].filter(([, value]) => String(value ?? '').trim());
+  ];
   $('#stageProfile').innerHTML =
     '<div class="profile-head"><div class="stage-avatar">' + (e.photo ? '<img src="' + e.photo + '" alt="' + esc(e.name) + '">' : esc((e.name || '人').slice(-1))) + '</div>' +
-    '<div class="profile-title"><span>Employee No</span><b>' + esc(e.employeeNo || e.id) + '</b><span>Name</span><h1>' + esc(e.name) + '</h1></div></div>' +
-    '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('') + '</div>' +
+    '<div class="profile-title"><span>Name</span><h1>' + esc(e.name) + '</h1></div></div>' +
+    '<div class="stage-basic-info">' + basicInfo.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(String(value ?? '').trim() || '--') + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="stage-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
     '<div class="discussion-note-panel"><div class="discussion-note-title">Discussion Notes</div><div class="discussion-note-grid">' +
       discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
@@ -285,21 +288,21 @@ function renderCurrentViews(){
   const counts = row.gridCounts || boxes.map(() => 0);
   const max = Math.max(1, ...counts);
   $('#voteSummary').textContent = voteSummaryText(row);
-  $('#hostRecommend').textContent = 'System Suggestion: ' + recommendationText(row);
+  $('#hostRecommend').textContent = uiText('系统建议：','System Suggestion: ') + recommendationText(row);
   updateVoteAxisBands('.stage-nine-card', row);
   $('#hostNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' votes · ' + pct(count, row.count) + '</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
-      '<div class="cell-note">' + (isDecision ? 'Discussion Result' : (isRecommend ? 'System Suggestion' : '&nbsp;')) + '</div>' +
+      '<div class="cell-note">' + (isDecision ? 'Discussion Result' : (isRecommend ? uiText('系统建议','System Suggestion') : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
   $('#hostDecisionBar').innerHTML =
-    '<div><span>System Suggestion</span><b>' + esc(recommendationText(row)) + '</b></div>' +
+    '<div><span>' + uiText('系统建议','System Suggestion') + '</span><b>' + esc(recommendationText(row)) + '</b></div>' +
     '<div><span>Discussion Result</span><b>' + esc(decisionText(row)) + '</b></div>' +
     '<div class="decision-controls current-decision">' +
       '<select id="currentGridSelect">' + gridOptions(row) + '</select>' +
@@ -418,7 +421,21 @@ function decideCurrent(type){
 }
 
 async function go(i){
-  await fetch('/api/current', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({index:i})});
+  if (!state || !resultRows.length) return;
+  const previousIndex = state.currentIndex;
+  const nextIndex = Math.max(0, Math.min(Number(i), resultRows.length - 1));
+  state.currentIndex = nextIndex;
+  renderEmployeePicker();
+  renderCurrentViews();
+  try {
+    const response = await fetch('/api/current', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({index:nextIndex})});
+    if (!response.ok) throw new Error('switch failed');
+  } catch {
+    state.currentIndex = previousIndex;
+    renderEmployeePicker();
+    renderCurrentViews();
+    $('#decisionMsg').textContent = '切换失败，请检查网络后重试';
+  }
 }
 
 $('#prev').onclick = () => go(state.currentIndex - 1);

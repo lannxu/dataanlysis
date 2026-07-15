@@ -1,25 +1,52 @@
-# 人才盘点实时投票工具
+# 人才盘点 / 九宫格评估系统
 
 ## 本地运行
 
-运行 `pnpm start`，打开 `http://localhost:3000/admin.html`。二维码会自动使用当前局域网地址。
+```powershell
+$env:PORT="3100"
+$env:PUBLIC_URL="http://192.168.31.227:3100"
+node server.mjs
+```
 
-## 远程服务器部署
+讨论区首页：`http://localhost:3100/home.html`
 
-推荐使用 Docker：
+## Docker 部署
 
 ```bash
+cp .env.example .env
+# 编辑 .env，将 PUBLIC_URL 改为正式域名
 docker compose up -d --build
 ```
 
-部署后通过 `https://你的域名/admin.html` 打开后台。二维码会根据访问后台时的域名、协议和端口自动生成，并指向同一服务器的手机评估页。
+默认容器服务地址为 `http://127.0.0.1:3000`。现场数据保存在 `data/session.json`，Docker 已将该目录设置为持久化目录。
 
-如果反向代理没有正确传递域名，设置环境变量强制指定公开地址：
+## Nginx 反向代理与域名
+
+项目支持 Nginx 反向代理、HTTPS 域名和 WebSocket 实时同步。
+
+1. 将 `deploy/nginx-talent-review.conf.example` 复制到 Nginx 配置目录。
+2. 把配置中的 `talent.example.com` 替换为正式域名。
+3. 如果应用端口不是 `3000`，修改 `upstream talent_review_app` 中的端口。
+4. 检查并重载 Nginx：
 
 ```bash
-PUBLIC_URL=https://talent.example.com docker compose up -d --build
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-反向代理需要保留 `Host`、`X-Forwarded-Host`、`X-Forwarded-Proto`，并允许 WebSocket 的 `Upgrade` 和 `Connection` 请求头。生产环境建议启用 HTTPS。
+5. 使用 Certbot 或公司证书为域名启用 HTTPS，并在 `.env` 中设置：
 
-健康检查地址：`/healthz`。现场数据保存在 `data/session.json`，Docker 部署时已映射为持久化目录。
+```dotenv
+PUBLIC_URL=https://你的域名
+```
+
+Nginx 必须转发 `Host`、`X-Forwarded-Host`、`X-Forwarded-Proto`，并保留 WebSocket 的 `Upgrade` 和 `Connection` 请求头。示例配置已包含这些设置。
+
+## 验证
+
+```text
+https://你的域名/healthz
+https://你的域名/home.html
+```
+
+`/healthz` 应返回 `{"ok":true,...}`。主持后台切换员工时，手机页面应实时同步。

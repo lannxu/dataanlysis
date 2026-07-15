@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -118,15 +118,15 @@ const fieldValue = (fields, names) => {
 };
 function renderFields(fields = {}){
   const el = $('#extraFields');
-  const standardLabels = ['Dept','Position','Band','EDSP 2025','PL 2025','PL 2024'];
+  const standardLabels = ['Dept','Position','Band','EDSP 2025','EDSP 2024','PL 2025','PL 2024'];
   const standardNorms = new Set(standardLabels.map(label => label.toLowerCase().replace(/[^a-z0-9]+/g, '')));
   const base = [
     ['Dept', current?.department], ['Position', current?.role],
-    ['Band', fieldValue(fields, ['Band','职级'])], ['EDSP 2025', fieldValue(fields, ['EDSP 2025','EDSP2025'])],
+    ['Band', fieldValue(fields, ['Band','职级'])], ['EDSP 2025', fieldValue(fields, ['EDSP 2025','EDSP2025'])], ['EDSP 2024', fieldValue(fields, ['EDSP 2024','EDSP2024'])],
     ['PL 2025', fieldValue(fields, ['PL 2025','PL2025'])], ['PL 2024', fieldValue(fields, ['PL 2024','PL2024'])]
   ];
   const extra = Object.entries(fields).filter(([label,value]) => String(value ?? '').trim() && !standardNorms.has(String(label).toLowerCase().replace(/[^a-z0-9]+/g, '')));
-  const entries = base.concat(extra).filter(([,value]) => String(value ?? '').trim());
+  const entries = base.map(([label,value]) => [label, String(value ?? '').trim() || '--']).concat(extra);
   el.innerHTML = entries.map(([label,value]) => '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>').join('');
   el.hidden = !entries.length;
 }
@@ -261,10 +261,12 @@ async function renderEmployee(index){
 }
 
 async function loadEmployees(){
+  const currentId = current?.id;
   employees = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
   $('#employeeSelect').innerHTML = employees.map((e, index) => '<option value="' + index + '">' + (index + 1) + '. ' + esc(e.name) + '</option>').join('');
   await refreshAllMyVotes();
-  await renderEmployee(0);
+  const preservedIndex = currentId ? employees.findIndex(employee => employee.id === currentId) : currentIndex;
+  await renderEmployee(preservedIndex >= 0 ? preservedIndex : 0);
 }
 
 function goNextOrStay(){
@@ -326,7 +328,7 @@ loadEmployees().catch(() => {
 (function(){
   function connectPre(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + (roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : ''));
-    ws.onmessage = event => { const m = JSON.parse(event.data); if (['employees','results','state'].includes(m.type)) loadEmployees(); };
+    ws.onmessage = event => { const m = JSON.parse(event.data); if (['employees','state'].includes(m.type)) loadEmployees(); if (m.type === 'results') refreshAllMyVotes(); };
     ws.onclose = () => setTimeout(connectPre, 1200);
   }
   connectPre();

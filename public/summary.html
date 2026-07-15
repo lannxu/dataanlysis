@@ -278,6 +278,7 @@ function render(){
   const direct = list.filter(row => row.decision?.type === 'direct');
   const pending = list.filter(row => row.decision?.type === 'pending');
   const open = list.filter(row => !row.decision);
+  const box123 = direct.filter(row => [1,2,3].includes(Number(row.decision?.grid))).length;
   $('#filterHint').textContent = (activeLevel ? '当前筛选：' + activeLevel : '全部员工') + (searchQuery ? ' · 搜索：' + searchQuery : '');
   const stats = [
     ['盘点员工', list.length, '人'],
@@ -285,7 +286,8 @@ function render(){
     ['累计评估票', list.reduce((sum,row) => sum + row.count, 0), '票'],
     ['直接落位', direct.length, '人'],
     ['待定', pending.length, '人'],
-    ['尚未讨论', open.length, '人']
+    ['尚未讨论', open.length, '人'],
+    ['Box 1/2/3 整体比例', pct(box123, list.length), box123 + '/' + list.length + ' 人']
   ];
   $('#kpis').innerHTML = stats.map(([label,value,unit]) => '<div class="card kpi"><span>' + label + '</span><b>' + value + '</b><small>' + unit + '</small></div>').join('');
   updateFinalAxisBands('.ninebox', direct, list);
