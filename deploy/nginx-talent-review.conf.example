@@ -1,12 +1,12 @@
 # Replace talent.example.com with the real domain.
-# The app is expected to listen on 127.0.0.1:3000.
+# The app is expected to listen on 127.0.0.1:3001.
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
 }
 
 upstream talent_review_app {
-    server 127.0.0.1:3000;
+    server 127.0.0.1:3001;
     keepalive 32;
 }
 

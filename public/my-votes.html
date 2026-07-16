@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -16,12 +16,7 @@
     </div>
   </div>
 
-  <section class="card my-current-vote-card">
-    <div class="section"><h2>初评结果当前员工</h2><span class="muted" id="currentStatus">跟随初评结果单人页面实时更新</span></div>
-    <div id="currentVoteView"><div class="empty">请输入评估人姓名或编号后查看</div></div>
-  </section>
-
-  <section class="card my-votes-card" style="margin-top:16px">
+  <section class="card my-votes-card">
     <div class="pre-toolbar my-votes-toolbar">
       <label>评估人</label>
       <input id="evaluatorName" placeholder="输入提交/导入时使用的姓名或编号">
@@ -29,6 +24,11 @@
     </div>
     <p class="muted pre-skip-tip">如导入了初评结果，请输入导入表里的评估人名称；如是在本机提交，也会自动匹配本机记录。</p>
     <div class="toast" id="status"></div>
+  </section>
+
+  <section class="card my-current-vote-card" style="margin-top:16px">
+    <div class="section"><h2>初评结果当前员工</h2><span class="muted" id="currentStatus">跟随初评结果单人页面实时更新</span></div>
+    <div id="currentVoteView"><div class="empty">请输入评估人姓名或编号后查看</div></div>
   </section>
 
   <section class="card my-votes-card" style="margin-top:16px">
@@ -43,6 +43,7 @@ const roomId = params.get('room') || 'default';
 const roomUrl = value => {
   const u = new URL(value, location.href);
   if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  if (['/api/results','/api/vote','/api/my-vote','/api/my-votes'].includes(u.pathname)) u.searchParams.set('mode', 'initial');
   return u.pathname + u.search + u.hash;
 };
 const nativeFetch = window.fetch.bind(window);
@@ -138,7 +139,7 @@ function connect(){
   ws.onmessage = event => {
     const message = JSON.parse(event.data);
     if (message.type === 'initial-current') applyStateMessage(message);
-    if (message.type === 'results' || message.type === 'employees') {
+    if (message.type === 'initial-results' || message.type === 'employees') {
       if ($('#evaluatorName').value.trim() || deviceEvaluatorId()) loadVotes(); else loadState();
     }
   };

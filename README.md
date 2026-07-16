@@ -18,7 +18,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-默认容器服务地址为 `http://127.0.0.1:3000`。现场数据保存在 `data/session.json`，Docker 已将该目录设置为持久化目录。
+生产环境中，应用通过 VPS 本机 `127.0.0.1:3001` 提供给 Nginx，域名流量由 Nginx 转发到该端口。Docker Compose 已将端口限制绑定到 `127.0.0.1:3001`，不会直接暴露到公网。现场数据保存在 `data/session.json`，Docker 已将该目录设置为持久化目录。
 
 ## Nginx 反向代理与域名
 
@@ -26,7 +26,7 @@ docker compose up -d --build
 
 1. 将 `deploy/nginx-talent-review.conf.example` 复制到 Nginx 配置目录。
 2. 把配置中的 `talent.example.com` 替换为正式域名。
-3. 如果应用端口不是 `3000`，修改 `upstream talent_review_app` 中的端口。
+3. 如果应用端口不是 `3001`，修改 `upstream talent_review_app` 中的端口。
 4. 检查并重载 Nginx：
 
 ```bash

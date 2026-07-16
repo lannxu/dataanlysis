@@ -24,6 +24,7 @@
       <label>选择员工</label>
       <select id="employeeSelect"></select>
     </div>
+    <div class="pre-voting-notice" id="preVotingNotice" hidden>会前初评已关闭，当前只能查看已有结果。</div>
 
     <div class="person pre-person">
       <div class="avatar" id="avatar">人</div>
@@ -73,6 +74,7 @@ const roomId = new URLSearchParams(location.search).get('room') || 'default';
 const roomUrl = value => {
   const u = new URL(value, location.href);
   if (u.pathname.startsWith('/api/') && roomId) u.searchParams.set('room', roomId);
+  if (['/api/results','/api/vote','/api/my-vote','/api/my-votes'].includes(u.pathname)) u.searchParams.set('mode', 'initial');
   return u.pathname + u.search + u.hash;
 };
 const nativeFetch = window.fetch.bind(window);
@@ -86,6 +88,7 @@ let pl = 0;
 let pot = 0;
 const handled = new Set();
 let statusFilter = 'all';
+let preVotingClosed = false;
 
 function makeDeviceEvaluatorId(){
   let saved = '';
@@ -155,7 +158,7 @@ function optionButtons(id, total, prefix){
     btn.onclick = () => {
       if (id === '#pl') pl = i; else pot = i;
       [...el.children].forEach((x, index) => x.classList.toggle('active', index === i - 1));
-      $('#submit').disabled = !(pl && pot && current);
+      $('#submit').disabled = preVotingClosed || !(pl && pot && current);
       updateBoxPreview();
     };
     el.appendChild(btn);
@@ -258,9 +261,24 @@ async function renderEmployee(index){
   $('#meta').textContent = current.id ? 'Employee No: ' + (current.employeeNo || current.id) : '--';
   renderFields(current.fields || {});
   await loadMyVote();
+  applyVotingAvailability(preVotingClosed);
+}
+
+function applyVotingAvailability(closed){
+  preVotingClosed = Boolean(closed);
+  $('#preVotingNotice').hidden = !preVotingClosed;
+  $('#submit').disabled = preVotingClosed || !(pl && pot && current);
+  $('#skipEmployee').disabled = preVotingClosed;
+  if (preVotingClosed) $('#toast').textContent = '会前初评已关闭，请联系主持人';
+}
+
+async function refreshVotingAvailability(){
+  const data = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
+  applyVotingAvailability(data.preVotingClosed);
 }
 
 async function loadEmployees(){
+  await refreshVotingAvailability().catch(() => {});
   const currentId = current?.id;
   employees = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
   $('#employeeSelect').innerHTML = employees.map((e, index) => '<option value="' + index + '">' + (index + 1) + '. ' + esc(e.name) + '</option>').join('');
@@ -328,7 +346,7 @@ loadEmployees().catch(() => {
 (function(){
   function connectPre(){
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + (roomId && roomId !== 'default' ? '/?room=' + encodeURIComponent(roomId) : ''));
-    ws.onmessage = event => { const m = JSON.parse(event.data); if (['employees','state'].includes(m.type)) loadEmployees(); if (m.type === 'results') refreshAllMyVotes(); };
+    ws.onmessage = event => { const m = JSON.parse(event.data); if (['employees','state'].includes(m.type)) loadEmployees(); if (m.type === 'initial-results') refreshAllMyVotes(); if (m.type === 'pre-voting') applyVotingAvailability(m.data?.preVotingClosed); };
     ws.onclose = () => setTimeout(connectPre, 1200);
   }
   connectPre();

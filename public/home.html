@@ -44,10 +44,11 @@ async function loadRooms(){
   const rooms = await fetch('/api/rooms', {cache:'no-store'}).then(r => r.json());
   $('#roomsGrid').innerHTML = rooms.map(room => {
     const qr = '/api/qr.svg?room=' + encodeURIComponent(room.id);
-    return '<article class="card room-card">' +
+    return '<article class="card room-card' + (room.locked ? ' room-locked' : '') + '">' +
       '<div class="room-card-head"><div><h2>' + esc(room.name) + '</h2><p class="muted">' + esc(room.id) + ' · ' + (room.total || 0) + ' 人</p></div>' +
-      '<div class="room-card-tools"><span>讨论区</span><div class="room-manage-actions"><button type="button" onclick="renameRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">更名</button>' +
-      (room.id === 'default' ? '' : '<button type="button" class="danger" onclick="deleteRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">删除</button>') + '</div></div></div>' +
+      '<div class="room-card-tools"><span class="room-lock-status">' + (room.locked ? '已锁定' : '讨论区') + '</span><div class="room-manage-actions">' +
+      '<button type="button" class="room-lock-action' + (room.locked ? ' active' : '') + '" onclick="toggleRoomLock(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),' + (!room.locked) + ',decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">' + (room.locked ? '解锁' : '锁定') + '</button>' +
+      (room.locked ? '' : '<button type="button" onclick="renameRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">更名</button>' + (room.id === 'default' ? '' : '<button type="button" class="danger" onclick="deleteRoom(decodeURIComponent(\'' + encodeURIComponent(room.id) + '\'),decodeURIComponent(\'' + encodeURIComponent(room.name) + '\'))">删除</button>')) + '</div></div></div>' +
       '<div class="room-card-body"><div class="room-qr-wrap"><img class="room-qr" src="' + qr + '" alt="' + esc(room.name) + ' 二维码"><span>现场扫码投票</span></div>' +
       '<div class="room-main-links"><a class="url" target="_blank" href="' + roomUrl('/index.html', room.id) + '">' + esc(abs('/index.html', room.id)) + '</a>' +
       '<div class="room-actions">' +
@@ -59,6 +60,17 @@ async function loadRooms(){
     '</article>';
   }).join('') || '<div class="card empty">暂无讨论区</div>';
 }
+async function toggleRoomLock(id, locked, name){
+  const message = locked
+    ? '确定锁定讨论区“' + name + '”吗？锁定后仍可查看和导出，但不能修改名单、投票、讨论记录或落位结果。'
+    : '确定解锁讨论区“' + name + '”吗？解锁后可以继续修改数据。';
+  if (!confirm(message)) return;
+  const response = await fetch('/api/rooms/' + encodeURIComponent(id) + '/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({locked})});
+  const data = await response.json();
+  $('#roomMsg').textContent = response.ok ? (locked ? '已锁定：' : '已解锁：') + name : data.error;
+  if (response.ok) await loadRooms();
+}
+
 async function renameRoom(id, currentName){
   const entered = prompt('请输入新的讨论区名称', currentName);
   if (entered === null) return;

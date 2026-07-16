@@ -15,6 +15,8 @@
       <div class="muted"><span class="status-dot"></span>手机端实时同步</div>
     </div>
     <div class="stage-actions">
+      <select id="bandFilter" aria-label="按岗位级别筛选"><option value="">全部岗位级别</option></select>
+      <input id="employeeSearch" type="search" aria-label="搜索员工" placeholder="搜索姓名/员工号">
       <select id="employeePicker" aria-label="选择当前员工"></select>
       <button class="secondary" id="prev">上一位</button>
       <span class="count" id="progress">-- / --</span>
@@ -46,6 +48,8 @@
       <div class="stage-decision" id="hostDecisionBar"></div>
 
     </section>
+  </section>
+
     <section class="stage-qr-card stage-qr-inline">
       <div class="section"><h2>扫码加入</h2></div>
       <img id="qr" alt="手机评估二维码">
@@ -59,7 +63,6 @@
         <div class="qr-tip">二维码会自动跟随当前域名、HTTPS 和端口；本地使用时手机与电脑需要连接同一 Wi-Fi。</div>
       </details>
     </section>
-  </section>
 
   <div id="decisionMsg" class="toast stage-toast"></div>
 
@@ -121,6 +124,8 @@ const boxes = [1,2,3,4,5,6,7,8,9];
 const gridOrder = [6,3,1,8,5,2,9,7,4];
 let state = null;
 let resultRows = [];
+let selectedBand = '';
+let employeeSearchQuery = '';
 let uploadedPhotos = {};
 let uploadedFields = {};
 const employeeAssetKey = employee => String(employee?.employeeNo || employee?.id || '') + '\u0000' + String(employee?.name || '');
@@ -173,13 +178,19 @@ function performanceLevelForGrid(grid, currentPl){
 function decisionPlText(row){
   return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
 }
+function placementSide(box, pl){
+  box = Number(box); pl = Number(pl);
+  if ([1,2,4].includes(box)) return pl === 4 ? 'left' : pl === 5 ? 'right' : 'center';
+  if ([6,8,9].includes(box)) return pl === 1 ? 'left' : pl === 2 ? 'right' : 'center';
+  return 'center';
+}
 
 function uiText(zh, en){ return window.talentI18n?.getLang?.() === 'en' ? en : zh; }
 
 function decisionText(row){
-  if (!row?.decision) return 'Not discussed';
-  if (row.decision.type === 'pending') return 'Pending';
-  return 'Direct · Box ' + row.decision.grid + decisionPlText(row);
+  if (!row?.decision) return uiText('未讨论','Not discussed');
+  if (row.decision.type === 'pending') return uiText('待定','Pending');
+  return uiText('直接落位 · Box ','Direct · Box ') + row.decision.grid + decisionPlText(row);
 }
 
 function recommendationText(row){
@@ -235,13 +246,46 @@ function voteSummaryText(row){
   return row.count + ' votes, ' + parts.map(x => x.count + ' in Box ' + x.box).join(', ');
 }
 
+function employeeBand(row){
+  const fields = row?.fields || {};
+  const key = Object.keys(fields).find(name => String(name).toLowerCase().replace(/[^a-z0-9一-龥]+/g, '') === 'band');
+  return String((key ? fields[key] : row?.band) || '').trim();
+}
+
+function employeeSearchText(row){
+  return [row?.name,row?.employeeNo,row?.id,row?.department,row?.role,...Object.values(row?.fields || {})].join(' ').toLowerCase();
+}
+
+function filteredEmployeeIndexes(){
+  const query = employeeSearchQuery.trim().toLowerCase();
+  return resultRows.map((row, index) => ({row, index})).filter(item =>
+    (!selectedBand || employeeBand(item.row) === selectedBand) && (!query || employeeSearchText(item.row).includes(query))
+  );
+}
+
+function renderBandFilter(){
+  const bands = [...new Set(resultRows.map(employeeBand).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN', {numeric:true}));
+  if (selectedBand && !bands.includes(selectedBand)) selectedBand = '';
+  $('#bandFilter').innerHTML = '<option value="">全部岗位级别</option>' + bands.map(band => '<option value="' + esc(band) + '"' + (band === selectedBand ? ' selected' : '') + '>' + esc(band) + '</option>').join('');
+}
+
 function renderEmployeePicker(){
   const picker = $('#employeePicker');
-  if (!state || !resultRows.length) {
+  const filtered = filteredEmployeeIndexes();
+  if (!state || !filtered.length) {
     picker.innerHTML = '<option>暂无员工</option>';
+    picker.disabled = true;
+    $('#progress').textContent = '0 / 0';
+    $('#prev').disabled = true;
+    $('#next').disabled = true;
     return;
   }
-  picker.innerHTML = resultRows.map((row, index) => '<option value="' + index + '" ' + (index === state.currentIndex ? 'selected' : '') + '>' + (index + 1) + '. ' + esc(row.name) + '</option>').join('');
+  picker.disabled = false;
+  picker.innerHTML = filtered.map(({row, index}, position) => '<option value="' + index + '" ' + (index === state.currentIndex ? 'selected' : '') + '>' + (position + 1) + '. ' + esc(row.name) + '</option>').join('');
+  const position = filtered.findIndex(item => item.index === state.currentIndex);
+  $('#progress').textContent = (position >= 0 ? position + 1 : 0) + ' / ' + filtered.length;
+  $('#prev').disabled = position <= 0;
+  $('#next').disabled = position < 0 || position >= filtered.length - 1;
 }
 
 function renderReviewProgress(){
@@ -294,20 +338,24 @@ function renderCurrentViews(){
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
+    const activeGrid = row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
+    const activePl = row.decision?.type === 'direct' ? row.decision.pl : row.recommendedPl;
+    const plMarker = activeGrid === box && activePl ? '<div class="single-pl-marker ' + placementSide(box, activePl) + '">PL' + activePl + '</div>' : '';
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
       '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
-      '<div class="cell-note">' + (isDecision ? 'Discussion Result' : (isRecommend ? uiText('系统建议','System Suggestion') : '&nbsp;')) + '</div>' +
+      plMarker +
+      '<div class="cell-note">' + (isDecision ? uiText('讨论结果','Discussion Result') : (isRecommend ? uiText('系统建议','System Suggestion') : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
   $('#hostDecisionBar').innerHTML =
     '<div><span>' + uiText('系统建议','System Suggestion') + '</span><b>' + esc(recommendationText(row)) + '</b></div>' +
-    '<div><span>Discussion Result</span><b>' + esc(decisionText(row)) + '</b></div>' +
+    '<div><span>' + uiText('讨论结果','Discussion Result') + '</span><b>' + esc(decisionText(row)) + '</b></div>' +
     '<div class="decision-controls current-decision">' +
       '<select id="currentGridSelect">' + gridOptions(row) + '</select>' +
-      '<button onclick="decideCurrent(\'direct\')">Place Directly</button>' +
-      '<button class="secondary" onclick="decideCurrent(\'pending\')">Pending</button>' +
+      '<button onclick="decideCurrent(\'direct\')">' + uiText('直接落位','Place Directly') + '</button>' +
+      '<button class="secondary" onclick="decideCurrent(\'pending\')">' + uiText('待定','Pending') + '</button>' +
     '</div>';
   wireDiscussionNote();
 }
@@ -381,9 +429,7 @@ function renderZones(rows){
 
 async function loadState(){
   state = await fetch('/api/state').then(r => r.json());
-  $('#progress').textContent = (state.currentIndex + 1) + ' / ' + state.total;
-  $('#prev').disabled = state.currentIndex <= 0;
-  $('#next').disabled = state.currentIndex >= state.total - 1;
+  renderBandFilter();
   renderEmployeePicker();
   renderReviewProgress();
   renderCurrentViews();
@@ -394,6 +440,7 @@ async function loadResults(){
   uploadedPhotos = Object.fromEntries(resultRows.filter(r => r.photo).map(r => [employeeAssetKey(r), r.photo]));
   uploadedFields = Object.fromEntries(resultRows.map(r => [employeeAssetKey(r), r.fields || {}]));
   $('#employees').value = resultRows.map(r => [r.employeeNo || r.id, r.name, r.department, r.role].join(',')).join('\n');
+  renderBandFilter();
   renderEmployeePicker();
   renderReviewProgress();
   renderZones(resultRows);
@@ -438,9 +485,25 @@ async function go(i){
   }
 }
 
-$('#prev').onclick = () => go(state.currentIndex - 1);
-$('#next').onclick = () => go(state.currentIndex + 1);
+$('#prev').onclick = () => { const items = filteredEmployeeIndexes(); const pos = items.findIndex(item => item.index === state.currentIndex); if (pos > 0) go(items[pos - 1].index); };
+$('#next').onclick = () => { const items = filteredEmployeeIndexes(); const pos = items.findIndex(item => item.index === state.currentIndex); if (pos >= 0 && pos < items.length - 1) go(items[pos + 1].index); };
 $('#employeePicker').onchange = event => go(Number(event.target.value));
+$('#bandFilter').onchange = event => {
+  selectedBand = event.target.value;
+  const items = filteredEmployeeIndexes();
+  if (items.length && !items.some(item => item.index === state?.currentIndex)) go(items[0].index);
+  else renderEmployeePicker();
+};
+$('#employeeSearch').oninput = event => {
+  employeeSearchQuery = event.target.value;
+  renderEmployeePicker();
+};
+$('#employeeSearch').onkeydown = event => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const item = filteredEmployeeIndexes()[0];
+  if (item) go(item.index);
+};
 
 $('#employeeFile').onchange = async event => {
   const file = event.target.files[0];

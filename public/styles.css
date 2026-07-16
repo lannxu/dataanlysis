@@ -342,3 +342,71 @@
 
 /* Two-column mobile employee facts */
 @media(max-width:480px){.live-vote-body .extra-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.live-vote-body .extra-fields>div{padding:9px 10px}.live-vote-body .extra-fields b{font-size:13px}}
+
+/* Keep the host review area, including the decision panel, within one desktop viewport. */
+@media(min-width:1121px){
+  .stage-topbar{min-height:44px}
+  .stage-actions{flex-wrap:nowrap;gap:6px}
+  .stage-actions select{min-width:0;max-width:none;padding:8px 9px}
+  #bandFilter{width:142px}
+  #employeePicker{width:158px}
+  .stage-actions .btn,.stage-actions button{padding:8px 10px;white-space:nowrap}
+  .stage-actions .count,.stage-actions .review-progress{white-space:nowrap;font-size:12px}
+  .stage-board{height:calc(100vh - 94px);min-height:560px}
+  .stage-board .card{padding:14px}
+  .stage-nine-card{gap:7px}
+  .stage-ninebox{padding-bottom:16px}
+  .stage-decision{padding:8px;gap:7px}
+}
+/* Summary detail 9-box vote distribution */
+.detail-nine-dist{display:grid;grid-template-columns:repeat(3,48px);gap:4px;min-width:152px}
+.detail-nine-dist span{display:flex;align-items:center;justify-content:space-between;gap:4px;background:#f3f6fc;border:1px solid #e4e9f2;border-radius:6px;padding:4px 5px}
+.detail-nine-dist small{font-size:9px;color:#778197;white-space:nowrap}
+.detail-nine-dist b{font-size:12px;color:#172034}
+/* Discussion room locking */
+.room-card.room-locked{border-color:#b9c7df;background:#fbfcff}
+.room-lock-status{font-weight:800;color:#536078}
+.room-locked .room-lock-status{color:#2457e6}
+.room-manage-actions .room-lock-action.active{border-color:#2457e6;color:#2457e6;background:#edf2ff}
+/* Host employee quick search */
+.stage-actions #employeeSearch{width:150px;min-width:0;border:1px solid #dfe5ef;border-radius:12px;background:#fff;padding:8px 9px;font-weight:700;color:#172034}
+.stage-actions #employeeSearch::placeholder{color:#8a94a8;font-weight:500}
+@media(max-width:1120px){.stage-actions #employeeSearch{width:150px;padding:7px 9px;font-size:12px}}
+/* Keep host actions on one line with search. */
+@media(min-width:1121px) and (max-width:1500px){
+  .stage-actions .review-progress{display:none}
+  #bandFilter{width:126px}
+  #employeePicker{width:142px}
+  .stage-actions #employeeSearch{width:136px}
+}
+/* Pre-voting open and closed states */
+.pre-share-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.pre-share-actions .danger-action{background:#c93645}
+.pre-voting-status{font-size:12px;font-weight:800;color:#0b8a60}
+.pre-voting-status.closed{color:#c93645}
+.pre-voting-notice{margin:0 0 14px;padding:11px 13px;border:1px solid #efb7bd;border-radius:10px;background:#fff3f4;color:#a52634;font-weight:800}
+/* PL alignment inside 9-box cells */
+.cell-people.aligned-cell-people{display:block}
+.placement-lanes{width:100%;min-width:0}
+.placement-lanes.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 8px}
+.placement-lanes.centered{display:flex;justify-content:center}
+.placement-lane{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;min-width:0}
+.placement-lanes.split .placement-lane.left{grid-column:1;grid-row:1;justify-content:flex-start}
+.placement-lanes.split .placement-lane.right{grid-column:2;grid-row:1;justify-content:flex-end}
+.placement-lanes.split .placement-lane.center{grid-column:1/-1;grid-row:2;justify-content:center}
+.placement-lanes.centered .placement-lane.center{justify-content:center}
+.placement-lanes.centered .placement-lane.left,.placement-lanes.centered .placement-lane.right{display:none}
+.placement-lane-label{flex:0 0 100%;color:#778197;font-size:9px;font-weight:800}
+.placement-lane.right .placement-lane-label{text-align:right}
+.placement-lane .grid-person.name-only{max-width:100%;min-width:0}
+/* Single-person PL alignment marker */
+.single-pl-marker{position:absolute;top:50%;transform:translateY(-50%);z-index:1;background:#fff;border:1px solid #d8e0ee;border-radius:8px;padding:5px 8px;color:#2457e6;font-size:11px;font-weight:900;box-shadow:0 2px 8px #1f315218}
+.single-pl-marker.left{left:9px}
+.single-pl-marker.right{right:9px}
+.single-pl-marker.center{left:50%;transform:translate(-50%,-50%)}
+/* Hide PL lane labels in live summary grid. */
+.summary-shell .placement-lane-label{display:none}
+/* Hide PL marker in initial single-person grid. */
+.initial-person-nine-card .single-pl-marker{display:none}
+/* Hide PL marker in host single-person grid. */
+.stage-nine-card .single-pl-marker{display:none}

@@ -66,7 +66,7 @@
     <div class="section"><h2>全场评估明细</h2><a class="btn" href="/api/export.csv">导出 CSV</a></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>员工</th><th>部门</th><th>岗位级别</th><th>人数</th><th>绩效票数</th><th>潜力票数</th><th>均分</th><th>系统推荐</th><th>讨论结论</th></tr></thead>
+        <thead><tr><th>员工</th><th>部门</th><th>岗位级别</th><th>人数</th><th>九宫格分布</th><th>均分</th><th>系统推荐</th><th>讨论结论</th></tr></thead>
         <tbody id="detail"></tbody>
       </table>
     </div>
@@ -118,16 +118,9 @@ let searchQuery = '';
 let expandedBox = null;
 
 
-const plGroupLabels = ['PL 1-2','PL3','PL 4-5'];
-const potGroupLabels = ['POT1','POT2','POT3'];
-function groupCounts(row, type){
-  if (type === 'pl') return row.plGroupCounts || [(row.plCounts?.[0] || 0) + (row.plCounts?.[1] || 0), row.plCounts?.[2] || 0, (row.plCounts?.[3] || 0) + (row.plCounts?.[4] || 0)];
-  return row.potGroupCounts || [row.potCounts?.[0] || 0, row.potCounts?.[1] || 0, row.potCounts?.[2] || 0];
-}
-function groupedDistHtml(row, type){
-  const labels = type === 'pl' ? plGroupLabels : potGroupLabels;
-  const counts = groupCounts(row, type);
-  return '<div class="dist grouped-dist">' + labels.map((label,index) => '<span>' + label + ' <b>' + (counts[index] || 0) + '</b><small>' + pct(counts[index] || 0, row.count) + '</small></span>').join('') + '</div>';
+function gridDistHtml(row){
+  const counts = row.gridCounts || Array(9).fill(0);
+  return '<div class="detail-nine-dist" aria-label="九宫格票数分布">' + gridOrder.map(box => '<span title="Box ' + box + ': ' + (counts[box - 1] || 0) + ' 票"><small>Box ' + box + '</small><b>' + (counts[box - 1] || 0) + '</b></span>').join('') + '</div>';
 }
 
 
@@ -197,6 +190,24 @@ function performanceLevelForGrid(grid, currentPl){
 
 function decisionPlText(row){
   return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
+}
+
+function placementSide(box, pl){
+  box = Number(box); pl = Number(pl);
+  if ([1,2,4].includes(box)) return pl === 4 ? 'left' : pl === 5 ? 'right' : 'center';
+  if ([6,8,9].includes(box)) return pl === 1 ? 'left' : pl === 2 ? 'right' : 'center';
+  return 'center';
+}
+function summaryPersonHtml(row){
+  return '<div class="grid-person name-only" draggable="true" title="拖动或点击调整 Box；当前 PL' + (row.decision?.pl || '-') + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + row.decision.grid + ')"><b>' + esc(row.name) + '</b></div>';
+}
+function placementLanesHtml(members, box){
+  const groups = {left:[],center:[],right:[]};
+  members.forEach(row => groups[placementSide(box, row.decision?.pl)].push(row));
+  const lane = (side, label) => '<div class="placement-lane ' + side + '">' + (label ? '<small class="placement-lane-label">' + label + '</small>' : '') + groups[side].map(summaryPersonHtml).join('') + '</div>';
+  const labels = [1,2,4].includes(Number(box)) ? ['PL4','PL5'] : [6,8,9].includes(Number(box)) ? ['PL1','PL2'] : ['', ''];
+  const split = labels[0] || labels[1];
+  return '<div class="placement-lanes ' + (split ? 'split' : 'centered') + '">' + lane('left', labels[0]) + lane('center', '') + lane('right', labels[1]) + '</div>';
 }
 
 async function moveEmployee(employeeId, grid, pl){
@@ -293,8 +304,8 @@ function render(){
   updateFinalAxisBands('.ninebox', direct, list);
   $('#nineGrid').innerHTML = gridOrder.map(box => {
     const members = direct.filter(row => row.decision.grid === box);
-    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people">' +
-      (members.length ? members.map(row => '<div class="grid-person name-only" draggable="true" title="拖动或点击调整 Box" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + row.decision.grid + ')"><b>' + esc(row.name) + '</b></div>').join('') : '<em>—</em>') +
+    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people aligned-cell-people">' +
+      (members.length ? placementLanesHtml(members, box) : '<em>—</em>') +
       '</div></div>';
   }).join('');
   $('#pendingCount').textContent = pending.length + ' 人';
@@ -306,8 +317,7 @@ function render(){
     '<td>' + esc(row.department) + '</td>' +
     '<td>' + esc(levelOf(row)) + '</td>' +
     '<td>' + row.count + '</td>' +
-    '<td>' + groupedDistHtml(row, 'pl') + '</td>' +
-    '<td>' + groupedDistHtml(row, 'pot') + '</td>' +
+    '<td>' + gridDistHtml(row) + '</td>' +
     '<td>PL <b>' + (row.count ? row.avgPL.toFixed(2) : '—') + '</b><br>POT <b>' + (row.count ? row.avgPOT.toFixed(2) : '—') + '</b></td>' +
     '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + (row.recommendedGrid ? 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>' : '暂不推荐') + '</span></td>' +
     '<td>' + (row.decision?.type === 'direct' ? '直接落位 · Box ' + row.decision.grid + decisionPlText(row) : row.decision?.type === 'pending' ? '待定' : '未讨论') + '</td>' +

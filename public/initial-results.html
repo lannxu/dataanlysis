@@ -121,7 +121,7 @@
       <h2>会前初评入口</h2>
       <p class="muted">将二维码或链接提前发给评估人，评估人可逐个员工提交初评。</p>
       <a class="url" id="preUrl" target="_blank"></a>
-      <div class="pre-share-actions"><a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a></div>
+      <div class="pre-share-actions"><a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a><button type="button" class="danger-action" id="togglePreVoting">关闭投票</button><span class="pre-voting-status" id="preVotingStatus">投票开放中</span></div>
     </div>
     <img id="preQr" alt="会前初评二维码">
   </section>
@@ -209,6 +209,7 @@ const followHost = ['1','true','yes','host'].includes(String(new URLSearchParams
 let mode = viewModeParam === 'person' || followHost ? 'person' : 'group';
 let selectedPersonIndex = 0;
 let hostCurrentEmployeeId = '';
+let preVotingClosed = false;
 const discussionNoteFields = [
   ['strength','Strength'],
   ['improvementArea','Improvement Area'],
@@ -384,6 +385,25 @@ function decisionPlText(row){
   return row?.decision?.pl ? ' · PL' + row.decision.pl : '';
 }
 
+function placementPl(row){ return Number(row?.decision?.pl || row?.recommendedPl || 0); }
+function placementSide(box, pl){
+  box = Number(box); pl = Number(pl);
+  if ([1,2,4].includes(box)) return pl === 4 ? 'left' : pl === 5 ? 'right' : 'center';
+  if ([6,8,9].includes(box)) return pl === 1 ? 'left' : pl === 2 ? 'right' : 'center';
+  return 'center';
+}
+function initialPersonHtml(row){
+  return '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整 Box，点击输入 PL/POT；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>';
+}
+function placementLanesHtml(members, box){
+  const groups = {left:[],center:[],right:[]};
+  members.forEach(row => groups[placementSide(box, placementPl(row))].push(row));
+  const lane = (side, label) => '<div class="placement-lane ' + side + '">' + (label ? '<small class="placement-lane-label">' + label + '</small>' : '') + groups[side].map(initialPersonHtml).join('') + '</div>';
+  const labels = [1,2,4].includes(Number(box)) ? ['PL4','PL5'] : [6,8,9].includes(Number(box)) ? ['PL1','PL2'] : ['', ''];
+  const split = labels[0] || labels[1];
+  return '<div class="placement-lanes ' + (split ? 'split' : 'centered') + '">' + lane('left', labels[0]) + lane('center', '') + lane('right', labels[1]) + '</div>';
+}
+
 async function moveEmployee(employeeId, grid, pl){
   if (!Number.isInteger(grid) || grid < 1 || grid > 9) return;
   if (pl === undefined) { const row = rows.find(item => item.id === employeeId); pl = performanceLevelForGrid(grid, row?.decision?.pl || row?.recommendedPl); if (pl === null) return; }
@@ -507,8 +527,8 @@ function renderGroup(){
   $('#initialPendingList').innerHTML = pending.length ? pending.map(row => '<div class="pending-person" draggable="true" title="拖入 9-Box，或点击输入 PL/POT" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><span>' + esc(levelOf(row)) + ' · ' + (row.count || 0) + '票</span></div>').join('') : '<div class="empty">暂无待定人员</div>';
   $('#nineGrid').innerHTML = gridOrder.map(box => {
     const members = list.filter(row => placementGrid(row) === box);
-    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people initial-draggable-people">' +
-      (members.length ? members.map(row => '<div class="grid-person name-only initial-grid-person ' + (row.decision?.type === 'direct' ? 'adjusted' : '') + '" draggable="true" title="拖动调整 Box，点击输入 PL/POT；当前：' + esc(placementText(row)) + '" ondragstart="event.dataTransfer.setData(\'text/plain\',\'' + encodeURIComponent(row.id) + '\')" onclick="event.stopPropagation();chooseGrid(decodeURIComponent(\'' + encodeURIComponent(row.id) + '\'),' + (placementGrid(row) || 5) + ')"><b>' + esc(row.name) + '</b><small>' + esc(levelOf(row)) + ' · ' + row.count + '票</small></div>').join('') : '<em>—</em>') +
+    return '<div class="nine-cell cell-' + box + ' box-zoomable" title="点击放大 Box ' + box + '" onclick="openBoxModal(' + box + ')" ondragover="event.preventDefault()" ondrop="dropTo(event,' + box + ')"><div class="cell-title"><b>Box ' + box + '</b><span>' + members.length + ' 人 · ' + pct(members.length, list.length) + '</span></div><div class="cell-people initial-draggable-people aligned-cell-people">' +
+      (members.length ? placementLanesHtml(members, box) : '<em>—</em>') +
       '</div></div>';
   }).join('');
   $('#detail').innerHTML = list.map(row => '<tr>' +
@@ -601,10 +621,14 @@ function renderPerson(){
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
+    const activeGrid = row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
+    const activePl = row.decision?.type === 'direct' ? row.decision.pl : row.recommendedPl;
+    const plMarker = activeGrid === box && activePl ? '<div class="single-pl-marker ' + placementSide(box, activePl) + '">PL' + activePl + '</div>' : '';
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
       '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
+      plMarker +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
@@ -733,6 +757,26 @@ $('#personPicker').onchange = event => { selectedPersonIndex = Number(event.targ
 $('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); updateInitialCurrent(); };
 $('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); updateInitialCurrent(); };
 
+function renderPreVotingState(closed){
+  preVotingClosed = Boolean(closed);
+  const button = $('#togglePreVoting');
+  const status = $('#preVotingStatus');
+  if (button) {
+    button.textContent = preVotingClosed ? '重新开放投票' : '关闭投票';
+    button.classList.toggle('secondary', preVotingClosed);
+    button.classList.toggle('danger-action', !preVotingClosed);
+  }
+  if (status) {
+    status.textContent = preVotingClosed ? '投票已关闭' : '投票开放中';
+    status.classList.toggle('closed', preVotingClosed);
+  }
+}
+
+async function refreshPreVotingState(){
+  const data = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
+  renderPreVotingState(data.preVotingClosed);
+}
+
 async function setupPreShare(){
   const link = document.querySelector('#preUrl');
   const qr = document.querySelector('#preQr');
@@ -827,11 +871,22 @@ if (initialVoteFile) {
   };
 }
 
+$('#togglePreVoting').onclick = async () => {
+  const closing = !preVotingClosed;
+  const message = closing ? '确定关闭会前初评投票吗？关闭后所有评估人将无法继续提交或修改结果。' : '确定重新开放会前初评投票吗？';
+  if (!confirm(message)) return;
+  const response = await fetch('/api/pre-voting', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({closed:closing})});
+  const data = await response.json();
+  if (!response.ok) { $('#preVotingStatus').textContent = data.error || '操作失败'; return; }
+  renderPreVotingState(data.closed);
+};
+
 setupPreShare();
+refreshPreVotingState().catch(() => {});
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
-  ws.onmessage = event => { const message = JSON.parse(event.data); if (followHost && (message.type === 'state' || message.type === 'current')) { applyHostCurrentEmployee(message.data?.employee); return; } if (['results','employees'].includes(message.type)) load(); };
+  ws.onmessage = event => { const message = JSON.parse(event.data); if (followHost && (message.type === 'state' || message.type === 'current')) { applyHostCurrentEmployee(message.data?.employee); return; } if (['initial-results','employees'].includes(message.type)) load(); if (message.type === 'pre-voting') renderPreVotingState(message.data?.preVotingClosed); };
   ws.onopen = () => $('#live').textContent = '数据实时更新';
   ws.onclose = () => { $('#live').textContent = '正在重新连接'; setTimeout(connect, 1200); };
 }
