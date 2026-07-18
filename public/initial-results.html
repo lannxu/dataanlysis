@@ -24,11 +24,26 @@
 
   <section class="card initial-control-card">
     <div class="initial-control-block">
-      <h2>按 Band 筛选</h2>
+      <h2>筛选</h2>
       <p class="muted">可按 Band 看整体落位，也可以逐个查看员工初评。</p>
     </div>
     <div class="initial-filter-controls initial-level-controls" id="groupToolbar">
       <select id="levelFilter"></select>
+      <details class="box-multi-filter" id="boxFilter">
+        <summary id="boxFilterSummary">全部 Box</summary>
+        <div class="box-multi-menu">
+          <label><input type="checkbox" value="1">Box 1</label>
+          <label><input type="checkbox" value="2">Box 2</label>
+          <label><input type="checkbox" value="3">Box 3</label>
+          <label><input type="checkbox" value="4">Box 4</label>
+          <label><input type="checkbox" value="5">Box 5</label>
+          <label><input type="checkbox" value="6">Box 6</label>
+          <label><input type="checkbox" value="7">Box 7</label>
+          <label><input type="checkbox" value="8">Box 8</label>
+          <label><input type="checkbox" value="9">Box 9</label>
+          <label><input type="checkbox" value="pending">待定</label>
+        </div>
+      </details>
       <button class="secondary" id="clearFilter">查看全部</button>
     </div>
     <div class="initial-filter-controls initial-mode-controls">
@@ -204,6 +219,7 @@ let initialEmployeePhotos = {};
 let initialEmployeeFields = {};
 const initialEmployeeKey = employee => String(employee?.employeeNo || employee?.id || '') + '\u0000' + String(employee?.name || '');
 let activeLevel = '';
+const activeBoxes = new Set();
 const viewModeParam = new URLSearchParams(location.search).get('view') || new URLSearchParams(location.search).get('mode') || '';
 const followHost = ['1','true','yes','host'].includes(String(new URLSearchParams(location.search).get('follow') || '').toLowerCase());
 let mode = viewModeParam === 'person' || followHost ? 'person' : 'group';
@@ -247,6 +263,18 @@ function recommendationText(row){
   return '建议 Box ' + row.recommendedGrid + recommendationPlText(row) + ' · ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识';
 }
 
+function recommendationText(row){
+  if (!row?.recommendedGrid) return '\u5f85\u5b9a';
+  return '\u5efa\u8bae Box ' + row.recommendedGrid + ' \u00b7 ' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '\u5171\u8bc6';
+}
+
+function placementText(row){
+  const grid = placementGrid(row);
+  if (!grid) return '\u5f85\u5b9a';
+  const source = row.decision?.type === 'direct' ? '\u5df2\u8c03\u6574' : '\u7cfb\u7edf\u63a8\u8350';
+  return source + ' \u00b7 Box ' + grid;
+}
+
 function placementText(row){
   const grid = placementGrid(row);
   if (!grid) return '待定';
@@ -273,7 +301,7 @@ function dimensionSummaryHtml(row){
   return '<div class="dimension-summary">' + rows.map(([title, labels, counts]) =>
     '<div class="dimension-summary-row"><b>' + title + '</b>' + labels.map((label, index) => {
       const count = counts[index] || 0;
-      return '<span><em>' + label + '</em><strong>' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
+      return '<span><em>' + label + '</em><strong class="' + (count > 0 ? 'vote-positive' : 'vote-zero') + '">' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
     }).join('') + '</div>'
   ).join('') + '</div>';
 }
@@ -314,7 +342,13 @@ function voteSummaryText(row){
 }
 
 function filteredRows(){
-  return activeLevel ? rows.filter(row => levelOf(row) === activeLevel) : rows;
+  return rows.filter(row => {
+    const levelOk = !activeLevel || levelOf(row) === activeLevel;
+    const grid = placementGrid(row);
+    const isPending = row.decision?.type === 'pending' || (row.decision?.type !== 'direct' && !row.recommendedGrid);
+    const boxOk = !activeBoxes.size || (activeBoxes.has('pending') && isPending) || (!isPending && activeBoxes.has(String(grid)));
+    return levelOk && boxOk;
+  });
 }
 
 function currentPersonRows(){
@@ -510,7 +544,9 @@ function renderGroup(){
   const adjusted = list.filter(row => row.decision?.type === 'direct');
   const pending = list.filter(row => row.decision?.type === 'pending' || (row.decision?.type !== 'direct' && !row.recommendedGrid));
   const box123 = list.filter(row => row.decision?.type !== 'pending' && [1,2,3].includes(Number(placementGrid(row)))).length;
-  $('#filterHint').textContent = activeLevel ? '当前 Band：' + activeLevel : '全部员工';
+  const boxLabel = [...activeBoxes].map(value => value === 'pending' ? '\u5f85\u5b9a' : 'Box ' + value).join(', ');
+  $('#boxFilterSummary').textContent = activeBoxes.size ? (activeBoxes.size === 1 ? boxLabel : '\u5df2\u9009 ' + activeBoxes.size + ' \u9879') : '\u5168\u90e8 Box';
+  $('#filterHint').textContent = (activeLevel ? 'Band: ' + activeLevel : '\u5168\u90e8\u5458\u5de5') + (boxLabel ? ' \u00b7 ' + boxLabel : '');
   $('#detailCount').textContent = list.length + ' 人';
   const stats = [
     ['筛选员工', list.length, '人'],
@@ -536,8 +572,8 @@ function renderGroup(){
     '<td>' + esc(row.department) + '</td>' +
     '<td>' + esc(row.role) + '</td>' +
     '<td>' + esc(levelOf(row)) + '</td>' +
-    '<td>' + row.count + '</td>' +
-    '<td>' + esc(boxDistribution(row)) + '</td>' +
+    '<td class="' + (row.count > 0 ? 'vote-positive' : 'vote-zero') + '">' + row.count + '</td>' +
+    '<td class="' + (row.count > 0 ? 'vote-positive' : 'vote-zero') + '">' + esc(boxDistribution(row)) + '</td>' +
     '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + recommendation(row) + '</span></td>' +
     '<td>' + esc((row.comments || []).join(' | ')) + '</td>' +
     '<td>' + esc(placementText(row)) + '</td>' +
@@ -548,6 +584,8 @@ function applyHostCurrentEmployee(employee){
   if (!followHost || !employee) return;
   hostCurrentEmployeeId = employee.id || '';
   activeLevel = '';
+  activeBoxes.clear();
+  $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; });
   const list = currentPersonRows();
   const index = list.findIndex(row => row.id === hostCurrentEmployeeId);
   if (index >= 0) selectedPersonIndex = index;
@@ -593,21 +631,12 @@ function renderPerson(){
     ['Band', fieldValue(['Band','职级']) || levelOf(row)], ['EDSP 2025', fieldValue(['EDSP 2025','EDSP2025'])], ['EDSP 2024', fieldValue(['EDSP 2024','EDSP2024'])],
     ['PL 2025', fieldValue(['PL 2025','PL2025'])], ['PL 2024', fieldValue(['PL 2024','PL2024'])]
   ];
-  const voteDetails = Array.isArray(row.voteDetails) ? row.voteDetails : [];
-  const voteDetailHtml = '<div class="initial-comments initial-vote-details"><small>全部会前初评记录</small>' +
-    (voteDetails.length ? voteDetails.map((vote, index) => {
-      const result = vote.skip ? 'Skip' : ('PL' + (vote.pl || '-') + ' / POT' + (vote.pot || '-') + (vote.grid ? ' · Box ' + vote.grid : ''));
-      const comment = vote.comment || '';
-      return '<div class="initial-vote-row"><div><b>' + esc(vote.evaluator || ('评估人 ' + (index + 1))) + '</b><span>' + esc(result) + '</span></div>' + (comment ? '<p>' + esc(comment) + '</p>' : '') + '</div>';
-    }).join('') : '<p><em>暂无初评记录</em></p>') +
-  '</div>';
   $('#personProfile').innerHTML =
     '<div class="profile-head"><div class="host-avatar">' + (row.photo ? '<img src="' + row.photo + '" alt="' + esc(row.name) + '">' : esc((row.name || '人').slice(-1))) + '</div>' +
     '<div class="profile-title"><span>Name</span><h1>' + esc(row.name) + '</h1></div></div>' +
     '<div class="host-facts">' + facts.map(([label, value]) => '<div><span>' + esc(label) + '</span><b>' + esc(String(value ?? '').trim() || '--') + '</b></div>').join('') + '</div>' +
     (fields.length ? '<div class="host-fields">' + fields.slice(0, 8).map(([k,v]) => '<div><small>' + esc(k) + '</small><b>' + esc(v) + '</b></div>').join('') + '</div>' : '') +
     ((row.comments || []).length ? '<div class="initial-comments"><small>初评 Comments</small><p>' + esc(row.comments.join(' | ')) + '</p></div>' : '') +
-    voteDetailHtml +
     '<div class="discussion-note-panel initial-person-notes"><div class="discussion-note-title">现场讨论记录</div><div class="discussion-note-grid">' +
       discussionNoteFields.map(([key,label]) => '<label><span>' + label + '</span><textarea class="discussion-note-box" data-person-note-key="' + key + '" placeholder="' + label + '">' + esc(normalizeDiscussionNote(row.discussionNote)[key] || '') + '</textarea></label>').join('') +
     '</div><div class="discussion-note-status" id="personNoteStatus">自动保存</div></div>';
@@ -621,14 +650,10 @@ function renderPerson(){
     const count = counts[box - 1] || 0;
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
-    const activeGrid = row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
-    const activePl = row.decision?.type === 'direct' ? row.decision.pl : row.recommendedPl;
-    const plMarker = activeGrid === box && activePl ? '<div class="single-pl-marker ' + placementSide(box, activePl) + '">PL' + activePl + '</div>' : '';
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span class="' + (count > 0 ? 'vote-positive' : 'vote-zero') + '">' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
-      plMarker +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
@@ -739,6 +764,8 @@ async function load(){
     } catch {}
     mode = 'person';
     activeLevel = '';
+    activeBoxes.clear();
+    $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; });
   } else {
     try {
       const initialState = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
@@ -752,7 +779,8 @@ async function load(){
 $('#modeGroup').onclick = () => { mode = 'group'; render(); };
 $('#modePerson').onclick = () => { mode = 'person'; if (followHost) syncHostCurrent(); else { render(); updateInitialCurrent(); } };
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; selectedPersonIndex = 0; render(); };
-$('#clearFilter').onclick = () => { activeLevel = ''; selectedPersonIndex = 0; render(); };
+$('#boxFilter').onchange = () => { activeBoxes.clear(); $('#boxFilter').querySelectorAll('input:checked').forEach(input => activeBoxes.add(input.value)); selectedPersonIndex = 0; render(); };
+$('#clearFilter').onclick = () => { activeLevel = ''; activeBoxes.clear(); $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; }); selectedPersonIndex = 0; render(); };
 $('#personPicker').onchange = event => { selectedPersonIndex = Number(event.target.value) || 0; renderPerson(); updateInitialCurrent(); };
 $('#prevPerson').onclick = () => { selectedPersonIndex = Math.max(0, selectedPersonIndex - 1); renderPerson(); updateInitialCurrent(); };
 $('#nextPerson').onclick = () => { selectedPersonIndex = Math.min(currentPersonRows().length - 1, selectedPersonIndex + 1); renderPerson(); updateInitialCurrent(); };

@@ -218,7 +218,7 @@ function dimensionSummaryHtml(row){
   return '<div class="dimension-summary">' + rows.map(([title, labels, counts]) =>
     '<div class="dimension-summary-row"><b>' + title + '</b>' + labels.map((label, index) => {
       const count = counts[index] || 0;
-      return '<span><em>' + label + '</em><strong>' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
+      return '<span><em>' + label + '</em><strong class="' + (count > 0 ? 'vote-positive' : 'vote-zero') + '">' + count + '票 · ' + pct(count, row.count) + '</strong></span>';
     }).join('') + '</div>'
   ).join('') + '</div>';
 }
@@ -342,7 +342,7 @@ function renderCurrentViews(){
     const activePl = row.decision?.type === 'direct' ? row.decision.pl : row.recommendedPl;
     const plMarker = activeGrid === box && activePl ? '<div class="single-pl-marker ' + placementSide(box, activePl) + '">PL' + activePl + '</div>' : '';
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
-      '<div class="stage-box-top"><b>Box ' + box + '</b><span>' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
+      '<div class="stage-box-top"><b>Box ' + box + '</b><span class="' + (count > 0 ? 'vote-positive' : 'vote-zero') + '">' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       plMarker +

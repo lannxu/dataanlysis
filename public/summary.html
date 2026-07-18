@@ -22,11 +22,27 @@
 
   <section class="card initial-filter-card summary-filter-card">
     <div>
-      <h2>按 Band 筛选</h2>
+      <h2>筛选</h2>
       <p class="muted">筛选字段固定读取员工 Excel 中的 Band 列。</p>
     </div>
     <div class="initial-filter-controls">
       <select id="levelFilter"></select>
+      <details class="box-multi-filter" id="boxFilter">
+        <summary id="boxFilterSummary">全部 Box</summary>
+        <div class="box-multi-menu">
+          <label><input type="checkbox" value="1">Box 1</label>
+          <label><input type="checkbox" value="2">Box 2</label>
+          <label><input type="checkbox" value="3">Box 3</label>
+          <label><input type="checkbox" value="4">Box 4</label>
+          <label><input type="checkbox" value="5">Box 5</label>
+          <label><input type="checkbox" value="6">Box 6</label>
+          <label><input type="checkbox" value="7">Box 7</label>
+          <label><input type="checkbox" value="8">Box 8</label>
+          <label><input type="checkbox" value="9">Box 9</label>
+          <label><input type="checkbox" value="pending">待定</label>
+          <label><input type="checkbox" value="open">尚未讨论</label>
+        </div>
+      </details>
       <input id="summarySearch" class="summary-search" type="search" placeholder="搜索姓名 / 部门 / 岗位">
       <button class="secondary" id="clearFilter">查看全部</button>
     </div>
@@ -114,13 +130,14 @@ const gridOrder = [6,3,1,8,5,2,9,7,4];
 const levelKeys = ['Band','band','BAND'];
 let rows = [];
 let activeLevel = '';
+const activeBoxes = new Set();
 let searchQuery = '';
 let expandedBox = null;
 
 
 function gridDistHtml(row){
   const counts = row.gridCounts || Array(9).fill(0);
-  return '<div class="detail-nine-dist" aria-label="九宫格票数分布">' + gridOrder.map(box => '<span title="Box ' + box + ': ' + (counts[box - 1] || 0) + ' 票"><small>Box ' + box + '</small><b>' + (counts[box - 1] || 0) + '</b></span>').join('') + '</div>';
+  return '<div class="detail-nine-dist" aria-label="九宫格票数分布">' + gridOrder.map(box => '<span title="Box ' + box + ': ' + (counts[box - 1] || 0) + ' 票"><small>Box ' + box + '</small><b class="' + ((counts[box - 1] || 0) > 0 ? 'vote-positive' : 'vote-zero') + '">' + (counts[box - 1] || 0) + '</b></span>').join('') + '</div>';
 }
 
 
@@ -152,8 +169,12 @@ function filteredRows(){
   const keyword = searchQuery.trim().toLowerCase();
   return rows.filter(row => {
     const levelOk = !activeLevel || levelOf(row) === activeLevel;
+    const boxOk = !activeBoxes.size ||
+      (activeBoxes.has('pending') && row.decision?.type === 'pending') ||
+      (activeBoxes.has('open') && !row.decision) ||
+      (row.decision?.type === 'direct' && activeBoxes.has(String(row.decision.grid)));
     const searchOk = !keyword || searchableText(row).includes(keyword);
-    return levelOk && searchOk;
+    return levelOk && boxOk && searchOk;
   });
 }
 
@@ -290,7 +311,9 @@ function render(){
   const pending = list.filter(row => row.decision?.type === 'pending');
   const open = list.filter(row => !row.decision);
   const box123 = direct.filter(row => [1,2,3].includes(Number(row.decision?.grid))).length;
-  $('#filterHint').textContent = (activeLevel ? '当前筛选：' + activeLevel : '全部员工') + (searchQuery ? ' · 搜索：' + searchQuery : '');
+  const boxLabel = [...activeBoxes].map(value => value === 'pending' ? '\u5f85\u5b9a' : value === 'open' ? '\u5c1a\u672a\u8ba8\u8bba' : 'Box ' + value).join(', ');
+  $('#boxFilterSummary').textContent = activeBoxes.size ? (activeBoxes.size === 1 ? boxLabel : '\u5df2\u9009 ' + activeBoxes.size + ' \u9879') : '\u5168\u90e8 Box';
+  $('#filterHint').textContent = (activeLevel ? 'Band: ' + activeLevel : '\u5168\u90e8\u5458\u5de5') + (boxLabel ? ' \u00b7 ' + boxLabel : '') + (searchQuery ? ' \u00b7 \u641c\u7d22: ' + searchQuery : '');
   const stats = [
     ['盘点员工', list.length, '人'],
     ['已参与评估', reviewed.length, '人'],
@@ -316,7 +339,7 @@ function render(){
     '<td><div class="employee-name">' + (row.photo ? '<img class="thumb" src="' + row.photo + '" alt="">' : '') + '<div><b>' + esc(row.name) + '</b><div class="muted">' + esc(row.role) + '</div></div></div></td>' +
     '<td>' + esc(row.department) + '</td>' +
     '<td>' + esc(levelOf(row)) + '</td>' +
-    '<td>' + row.count + '</td>' +
+    '<td class="' + (row.count > 0 ? 'vote-positive' : 'vote-zero') + '">' + row.count + '</td>' +
     '<td>' + gridDistHtml(row) + '</td>' +
     '<td>PL <b>' + (row.count ? row.avgPL.toFixed(2) : '—') + '</b><br>POT <b>' + (row.count ? row.avgPOT.toFixed(2) : '—') + '</b></td>' +
     '<td><span class="recommend ' + (row.recommendedGrid ? '' : 'no-recommend') + '">' + (row.recommendedGrid ? 'Box ' + row.recommendedGrid + '<br><b>' + pct(Math.round((row.recommendedShare || 0) * 100), 100) + '共识</b>' : '暂不推荐') + '</span></td>' +
@@ -330,8 +353,9 @@ async function load(){
 }
 
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; render(); };
+$('#boxFilter').onchange = () => { activeBoxes.clear(); $('#boxFilter').querySelectorAll('input:checked').forEach(input => activeBoxes.add(input.value)); render(); };
 $('#summarySearch').oninput = event => { searchQuery = event.target.value; render(); };
-$('#clearFilter').onclick = () => { activeLevel = ''; searchQuery = ''; $('#summarySearch').value = ''; render(); };
+$('#clearFilter').onclick = () => { activeLevel = ''; activeBoxes.clear(); searchQuery = ''; $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; }); $('#summarySearch').value = ''; render(); };
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);

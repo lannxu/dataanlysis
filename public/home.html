@@ -14,12 +14,9 @@
       <div class="brand">人才盘点 · 讨论区首页</div>
       <div class="muted"><span class="status-dot"></span>每个讨论区都有独立二维码和独立数据</div>
     </div>
-    <div class="actions home-top-actions">
-      <a class="btn secondary-link" href="/admin.html">默认主持后台</a>
-      <a class="btn secondary-link" href="/initial-results.html">默认初评结果</a>
-      <a class="btn secondary-link" href="/summary.html">默认当场总览</a>
-    </div>
   </div>
+
+  <section class="home-account-bar"><div><b id="currentUser">当前账号</b><span class="muted">仅显示你创建的讨论区</span></div><div class="actions"><a class="btn secondary-link" href="/change-password.html">修改密码</a><a class="btn secondary-link" id="accountLink" href="/accounts.html" hidden>账号管理</a><button class="secondary" id="logout">退出登录</button></div></section>
 
   <section class="card room-create-card">
     <div>
@@ -38,6 +35,8 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function loadAccount(){const response=await fetch('/api/auth/status',{cache:'no-store'});const data=await response.json();if(!data.user){location.href='/login.html?next=/home.html';return false}$('#currentUser').textContent=data.user.name||data.user.username;$('#accountLink').hidden=data.user.role!=='admin';return true}
+$('#logout').onclick=async()=>{await fetch('/api/auth/logout',{method:'POST'});location.href='/login.html'};
 function roomUrl(path, id){ const u = new URL(path, location.origin); if (id && id !== 'default') u.searchParams.set('room', id); return u.pathname + u.search; }
 function abs(path, id){ return new URL(roomUrl(path, id), location.origin).toString(); }
 async function loadRooms(){
@@ -98,7 +97,7 @@ $('#createRoom').onclick = async () => {
   $('#roomMsg').textContent = response.ok ? '已创建：' + data.name : data.error;
   if (response.ok) { $('#roomName').value = ''; await loadRooms(); }
 };
-loadRooms();
+loadAccount().then(ok=>{if(ok)loadRooms()});
 </script>
 </body>
 </html>
