@@ -86,7 +86,7 @@
   .admin-tools-panel[open]{max-height:45vh;overflow:auto;padding:10px}
   .admin-tools-panel>summary{padding:6px 0;font-size:12px}
 }
-@media(max-width:720px){.stage-actions a[href="/summary.html"],.stage-actions a[href="/api/export.csv"]{display:none}.stage-topbar{display:grid;grid-template-columns:1fr auto}.stage-actions{max-width:390px}.stage-actions a[href="/initial-results.html"]{display:inline-flex}}
+@media(max-width:720px){.stage-actions .stage-desktop-action{display:none}.stage-topbar{display:grid;grid-template-columns:1fr auto}.stage-actions{max-width:390px}.stage-actions a[href^="/initial-results.html"]{display:inline-flex}}
 
 
 /* Pre-evaluation and initial results */

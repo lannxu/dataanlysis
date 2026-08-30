@@ -280,7 +280,7 @@ async function refreshVotingAvailability(){
 async function loadEmployees(){
   await refreshVotingAvailability().catch(() => {});
   const currentId = current?.id;
-  employees = await fetch('/api/results', {cache:'no-store'}).then(r => r.json());
+  employees = await fetch('/api/public-employees', {cache:'no-store'}).then(r => r.json());
   $('#employeeSelect').innerHTML = employees.map((e, index) => '<option value="' + index + '">' + (index + 1) + '. ' + esc(e.name) + '</option>').join('');
   await refreshAllMyVotes();
   const preservedIndex = currentId ? employees.findIndex(employee => employee.id === currentId) : currentIndex;

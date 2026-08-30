@@ -17,7 +17,7 @@
     <div class="actions">
       <a class="btn secondary-link" href="/admin.html">返回主持后台</a>
       <a class="btn secondary-link" href="/pre.html" target="_blank">打开会前初评</a>
-      <a class="btn" href="/api/export.csv?mode=initial">导出初评汇总 CSV</a>
+      <a class="btn" href="/api/export-initial-summary.csv?v=final-pot">导出初评汇总 CSV</a>
     </div>
   </div>
 
@@ -166,7 +166,7 @@
   <section class="card initial-import-card">
     <div>
       <h2>直接导入初评结果</h2>
-      <p class="muted">适合已经线下收集 Excel 的场景。模板列：Employee No、Name、Dept、Position、Band、PL 2025、PL 2024、EDSP 2025、PL 2026、POT 2026、Box、Comments。</p>
+      <p class="muted">适合已经线下收集 Excel 的场景。模板列：Employee No、Name、Dept、Position、Band、EDSP 2025、EDSP 2024、PL 2025、PL 2024、PL 2026、POT 2026、Box、Comments。</p>
     </div>
     <div class="initial-import-actions">
       <a class="btn secondary-link" href="/api/initial-votes-template.xlsx" download>下载初评导入模板</a>
@@ -224,10 +224,9 @@ const initialEmployeeKey = employee => String(employee?.employeeNo || employee?.
 let activeLevel = '';
 const activeBoxes = new Set();
 const viewModeParam = new URLSearchParams(location.search).get('view') || new URLSearchParams(location.search).get('mode') || '';
-const followHost = ['1','true','yes','host'].includes(String(new URLSearchParams(location.search).get('follow') || '').toLowerCase());
-let mode = viewModeParam === 'person' || followHost ? 'person' : 'group';
+const followPerson = ['1','true','yes','host','initial'].includes(String(new URLSearchParams(location.search).get('follow') || '').toLowerCase());
+let mode = viewModeParam === 'person' || followPerson ? 'person' : 'group';
 let selectedPersonIndex = 0;
-let hostCurrentEmployeeId = '';
 let preVotingClosed = false;
 const discussionNoteFields = [
   ['strength','Strength'],
@@ -377,10 +376,6 @@ function renderMode(){
   $('#personView').hidden = mode !== 'person';
   $('#personToolbar').hidden = mode !== 'person';
   $('#groupToolbar').hidden = false;
-  if (followHost && mode === 'person') {
-    const hint = document.querySelector('.initial-control-block p');
-    if (hint) hint.textContent = '正在跟随主持后台当前员工；主持人切换下一位时，这里会自动同步。';
-  }
 }
 
 function draggedId(event){
@@ -583,27 +578,6 @@ function renderGroup(){
   '</tr>').join('');
 }
 
-function applyHostCurrentEmployee(employee){
-  if (!followHost || !employee) return;
-  hostCurrentEmployeeId = employee.id || '';
-  activeLevel = '';
-  activeBoxes.clear();
-  $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; });
-  const list = currentPersonRows();
-  const index = list.findIndex(row => row.id === hostCurrentEmployeeId);
-  if (index >= 0) selectedPersonIndex = index;
-  mode = 'person';
-  render();
-}
-
-async function syncHostCurrent(){
-  if (!followHost) return;
-  try {
-    const state = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
-    applyHostCurrentEmployee(state.employee);
-  } catch {}
-}
-
 function renderPersonPicker(){
   const list = currentPersonRows();
   $('#personPicker').innerHTML = list.length
@@ -756,31 +730,16 @@ async function load(){
   initialEmployeeFields = Object.fromEntries(rows.map(row => [initialEmployeeKey(row), row.fields || {}]));
   const employeeEditor = document.querySelector('#initialEmployees');
   if (employeeEditor && document.activeElement !== employeeEditor) employeeEditor.value = rows.map(row => [row.employeeNo || row.id, row.name, row.department, row.role].join(',')).join('\n');
-  if (followHost) {
-    try {
-      const state = await fetch('/api/state', {cache:'no-store'}).then(r => r.json());
-      if (state.employee) {
-        hostCurrentEmployeeId = state.employee.id || '';
-        const index = rows.findIndex(row => row.id === hostCurrentEmployeeId);
-        if (index >= 0) selectedPersonIndex = index;
-      }
-    } catch {}
-    mode = 'person';
-    activeLevel = '';
-    activeBoxes.clear();
-    $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; });
-  } else {
-    try {
-      const initialState = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
-      const index = rows.findIndex(row => row.id === initialState.employee?.id);
-      if (index >= 0) selectedPersonIndex = index;
-    } catch {}
-  }
+  try {
+    const initialState = await fetch('/api/initial-state', {cache:'no-store'}).then(r => r.json());
+    const index = rows.findIndex(row => row.id === initialState.employee?.id);
+    if (index >= 0) selectedPersonIndex = index;
+  } catch {}
   render();
 }
 
 $('#modeGroup').onclick = () => { mode = 'group'; render(); };
-$('#modePerson').onclick = () => { mode = 'person'; if (followHost) syncHostCurrent(); else { render(); updateInitialCurrent(); } };
+$('#modePerson').onclick = () => { mode = 'person'; render(); updateInitialCurrent(); };
 $('#levelFilter').onchange = event => { activeLevel = event.target.value; selectedPersonIndex = 0; render(); };
 $('#boxFilter').onchange = () => { activeBoxes.clear(); $('#boxFilter').querySelectorAll('input:checked').forEach(input => activeBoxes.add(input.value)); selectedPersonIndex = 0; render(); };
 $('#clearFilter').onclick = () => { activeLevel = ''; activeBoxes.clear(); $('#boxFilter').querySelectorAll('input').forEach(input => { input.checked = false; }); selectedPersonIndex = 0; render(); };
@@ -917,7 +876,7 @@ refreshPreVotingState().catch(() => {});
 load();
 function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
-  ws.onmessage = event => { const message = JSON.parse(event.data); if (followHost && (message.type === 'state' || message.type === 'current')) { applyHostCurrentEmployee(message.data?.employee); return; } if (['initial-results','employees'].includes(message.type)) load(); if (message.type === 'pre-voting') renderPreVotingState(message.data?.preVotingClosed); };
+  ws.onmessage = event => { const message = JSON.parse(event.data); if (['initial-results','employees','initial-current'].includes(message.type)) load(); if (message.type === 'pre-voting') renderPreVotingState(message.data?.preVotingClosed); };
   ws.onopen = () => $('#live').textContent = '数据实时更新';
   ws.onclose = () => { $('#live').textContent = '正在重新连接'; setTimeout(connect, 1200); };
 }
