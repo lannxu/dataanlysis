@@ -115,6 +115,11 @@ app.post('/api/import-initial-votes',express.raw({type:['application/vnd.openxml
 
 app.get('/healthz',(_q,r)=>r.json({ok:true,version:'4.0.0'}));
 app.get('/api/export-initial.csv',(_q,r)=>{
+  const employeeField=(employee,...names)=>{
+    const wanted=new Set(names.map(name=>String(name).toLowerCase().replace(/[^a-z0-9]/g,'')));
+    const entry=Object.entries(employee.fields||{}).find(([key])=>wanted.has(String(key).toLowerCase().replace(/[^a-z0-9]/g,'')));
+    return entry?.[1]||'';
+  };
   const evaluators=new Map();
   for(const employee of state.employees){
     for(const [evaluatorId,vote] of Object.entries((state.initialVotes||{})[employee.id]||{})){
@@ -125,10 +130,10 @@ app.get('/api/export-initial.csv',(_q,r)=>{
       if(!current||String(vote.updatedAt||'')>=String(current.updatedAt||''))evaluators.get(key).votes[employee.id]=vote;
     }
   }
-  const total=state.employees.length,rows=[['评估人','已处理','员工总数','完成率','员工编号','姓名','部门','岗位','Band','状态','PL','POT','Box','Strength','Improvement Area','Others','提交时间']];
+  const total=state.employees.length,rows=[['评估人','已处理','员工总数','完成率','员工编号','姓名','部门','岗位','Band','EDSP 2025','EDSP 2024','PL 2025','PL 2024','状态','PL','POT','Box','Strength','Improvement Area','Others','提交时间']];
   const append=(evaluator,employee,vote,completed)=>{
     const comment=cleanVoteComment(vote?.comment),status=!vote?'未评':vote.skip?'Skip':'已评';
-    rows.push([evaluator,completed,total,total?Math.round(completed/total*100)+'%':'0%',employee.employeeNo||employee.id,employee.name,employee.department,employee.role,employee.fields?.Band||employee.fields?.band||'',status,vote&&!vote.skip&&vote.pl?'PL'+vote.pl:'',vote&&!vote.skip&&vote.pot?'POT'+vote.pot:'',vote&&!vote.skip?gridBox(vote.pl,vote.pot):'',comment.strength,comment.improvementArea,comment.others,vote?.updatedAt||'']);
+    rows.push([evaluator,completed,total,total?Math.round(completed/total*100)+'%':'0%',employee.employeeNo||employee.id,employee.name,employee.department,employee.role,employeeField(employee,'Band'),employeeField(employee,'EDSP 2025','EDSP2025'),employeeField(employee,'EDSP 2024','EDSP2024'),employeeField(employee,'PL 2025','PL2025'),employeeField(employee,'PL 2024','PL2024'),status,vote&&!vote.skip&&vote.pl?'PL'+vote.pl:'',vote&&!vote.skip&&vote.pot?'POT'+vote.pot:'',vote&&!vote.skip?gridBox(vote.pl,vote.pot):'',comment.strength,comment.improvementArea,comment.others,vote?.updatedAt||'']);
   };
   if(evaluators.size){
     for(const evaluator of evaluators.values()){
