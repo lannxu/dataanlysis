@@ -336,6 +336,8 @@ function renderCurrentViews(){
   updateVoteAxisBands('.stage-nine-card', row);
   $('#hostNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
+    const voters = (row.voteDetails || []).filter(vote => !vote.skip && vote.grid === box);
+    const voterNames = voters.map(vote => '<span class="box-evaluator" translate="no">' + esc(vote.evaluatorName || uiText('未署名评委','Unnamed evaluator')) + '</span>').join('');
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     const activeGrid = row.decision?.type === 'direct' ? row.decision.grid : row.recommendedGrid;
@@ -346,6 +348,7 @@ function renderCurrentViews(){
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
       plMarker +
+      '<div class="box-evaluators" tabindex="0" aria-label="' + uiText('评委名单','Evaluators') + '">' + voterNames + '</div>' +
       '<div class="cell-note">' + (isDecision ? uiText('讨论结果','Discussion Result') : (isRecommend ? uiText('系统建议','System Suggestion') : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');

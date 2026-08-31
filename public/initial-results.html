@@ -625,12 +625,15 @@ function renderPerson(){
   updateVoteAxisBands('.initial-person-nine-card', row);
   $('#personNineGrid').innerHTML = gridOrder.map((box) => {
     const count = counts[box - 1] || 0;
+    const voters = (row.voteDetails || []).filter(vote => !vote.skip && vote.grid === box);
+    const voterNames = voters.map(vote => '<span class="box-evaluator" translate="no">' + esc(vote.evaluatorName || (vote.source === 'excel' ? vote.evaluator : '') || '未署名评委') + '</span>').join('');
     const isRecommend = row.recommendedGrid === box;
     const isDecision = row.decision?.type === 'direct' && row.decision.grid === box;
     return '<div class="stage-nine-cell cell-' + box + (isRecommend ? ' recommended-cell' : '') + (isDecision ? ' decision-cell' : '') + '">' +
       '<div class="stage-box-top"><b>Box ' + box + '</b><span class="' + (count > 0 ? 'vote-positive' : 'vote-zero') + '">' + count + ' 人 · ' + pct(count, row.count) + '</span></div>' +
       '<div class="stage-box-count">' + count + '</div>' +
       '<div class="stage-box-bar"><i style="width:' + (count ? Math.max(8, count / max * 100) : 0) + '%"></i></div>' +
+      '<div class="box-evaluators" tabindex="0" aria-label="评委名单">' + voterNames + '</div>' +
       '<div class="cell-note">' + (isDecision ? '讨论结果' : (isRecommend ? '系统建议' : '&nbsp;')) + '</div>' +
     '</div>';
   }).join('');
