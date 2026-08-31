@@ -1,5 +1,7 @@
 (() => {
   const dict = {
+    'Box 1/2/3 整体比例':'Box 1/2/3 Overall Share','Box 7/8/9 整体比例':'Box 7/8/9 Overall Share',
+    '显示评审人姓名':'Show evaluator names',
     '评委姓名':'Evaluator Name','请输入姓名':'Enter your name','未署名评委':'Unnamed evaluator',
     '人才盘点 · 会前初评':'Talent Review · Pre-evaluation','人才盘点 · 初评结果':'Talent Review · Initial Results','人才盘点 · 讨论区首页':'Talent Review · Rooms','人才盘点 · 主持后台':'Talent Review · Host Console','人才盘点 · 当场总览':'Talent Review · Live Overview','我的初评结果':'My Initial Ratings',
     '数据实时更新':'Live data','手机端实时同步':'Mobile sync','返回主持后台':'Back to Host Console','打开会前初评':'Open Pre-evaluation','导出 CSV':'Export CSV','讨论区首页':'Rooms Home','初评结果':'Initial Results','当场总览':'Live Overview','主持后台':'Host Console','会前初评':'Pre-evaluation',

@@ -16,6 +16,12 @@ test('Fetch adapter preserves auth, ownership, live/initial isolation and export
   assert.equal((await call('/api/auth/setup', {username: 'admin', password: 'test-password'})).status, 200);
   const room = await (await call('/api/rooms', {name: 'Panel'})).json();
   const suffix = '?room=' + room.id;
+  assert.deepEqual(await (await call('/api/evaluator-visibility' + suffix)).json(), {showEvaluatorNames: true});
+  assert.equal((await call('/api/evaluator-visibility' + suffix, {showEvaluatorNames: false}, {public: true})).status, 401);
+  assert.equal((await call('/api/evaluator-visibility' + suffix, {showEvaluatorNames: 'false'})).status, 400);
+  assert.equal((await call('/api/evaluator-visibility' + suffix, {showEvaluatorNames: false})).status, 200);
+  assert.deepEqual(await (await call('/api/evaluator-visibility' + suffix)).json(), {showEvaluatorNames: false});
+  assert.equal((await (await call('/api/evaluator-visibility')).json()).showEvaluatorNames, true);
   assert.equal((await call('/api/employees' + suffix, {employees: [{id: 'E1', name: 'One'}, {id: 'E2', name: 'Two'}]})).status, 200);
   const vote = {employeeId: 'E1', evaluatorId: 'judge-a', evaluatorName: 'Judge A', pl: 5, pot: 3};
   assert.equal((await call('/api/vote' + suffix, vote, {public: true})).status, 200);
@@ -32,5 +38,6 @@ test('Fetch adapter preserves auth, ownership, live/initial isolation and export
   assert.equal((await call('/api/results' + suffix, null, {public: true})).status, 401);
   assert.equal((await call('/api/state?room=missing')).status, 404);
   await call('/api/rooms/' + room.id + '/lock', {locked: true});
+  assert.equal((await call('/api/evaluator-visibility' + suffix, {showEvaluatorNames: true})).status, 423);
   assert.equal((await call('/api/vote' + suffix, vote, {public: true})).status, 423);
 });

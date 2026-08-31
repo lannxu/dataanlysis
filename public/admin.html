@@ -6,6 +6,7 @@
   <title>人才盘点后台</title>
   <link rel="stylesheet" href="/styles.css">
   <script defer src="/i18n.js"></script>
+  <script defer src="/evaluator-visibility.js"></script>
 </head>
 <body class="admin-stage-body">
 <main class="admin-stage-shell">
@@ -40,6 +41,7 @@
       <div class="stage-nine-head">
         <div>
           <h2>9-Box 初评落位</h2>
+          <label class="evaluator-visibility-control"><input type="checkbox" id="showEvaluatorNames" disabled><span>显示评审人姓名</span></label>
           <p id="voteSummary">暂无投票</p>
         </div>
         <div class="host-recommend" id="hostRecommend">系统建议：--</div>
@@ -572,10 +574,12 @@ function connect(){
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + wsRoomPath);
   ws.onmessage = event => {
     const message = JSON.parse(event.data);
+    if (message.type === 'evaluator-visibility') window.evaluatorVisibility?.refresh();
     if (['state','current','employees'].includes(message.type)) loadState();
     if (['results','employees'].includes(message.type)) loadResults();
   };
   ws.onclose = () => setTimeout(connect, 1200);
+  ws.onopen = () => window.evaluatorVisibility?.refresh();
 }
 connect();
 </script>
