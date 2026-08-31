@@ -1,0 +1,73 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import WebSocket from 'ws';
+import { once } from 'node:events';
+import JSZip from 'jszip';
+
+const base = process.env.CF_TEST_URL;
+test('Cloudflare runtime: R2, durable state, sessions, WebSocket and tenant isolation', {skip: !base}, async () => {
+  assert.ok(['127.0.0.1', 'localhost'].includes(new URL(base).hostname), 'Only isolated local deployments may be tested');
+  let cookie = '';
+  async function call(path, body, options = {}) {
+    const response = await fetch(base + path, {method: options.method || (body ? 'POST' : 'GET'), redirect: 'manual', headers: {'content-type': 'application/json', cookie: options.public ? '' : cookie}, body: body ? JSON.stringify(body) : undefined});
+    if (response.headers.has('set-cookie')) cookie = response.headers.get('set-cookie').split(';')[0];
+    return response;
+  }
+  const status = await (await call('/api/auth/status')).json();
+  const login = {username: 'cf-test-admin', password: 'cf-test-only-password'};
+  const auth = await call(status.setupRequired ? '/api/auth/setup' : '/api/auth/login', login);
+  assert.equal(auth.status, 200, await auth.text());
+  assert.equal((await call('/admin.html', null, {public: true})).status, 302);
+  assert.equal((await call('/admin', null, {public: true})).status, 302);
+  const room = await (await call('/api/rooms', {name: 'Runtime ' + Date.now()})).json();
+  assert.ok(room.id);
+  const suffix = '?room=' + room.id;
+  const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aI1cAAAAASUVORK5CYII=';
+  assert.equal((await call('/api/employees' + suffix, {employees: [{id: 'E1', name: 'One', photo: image, fields: {'EDSP 2024': 'A', 'PL 2025': 'PL4', Band: 'M3'}}, {id: 'E2', name: 'Two'}]})).status, 200);
+  const state = await (await call('/api/state' + suffix)).json();
+  assert.match(state.employee.photo, /^\/api\/photos\//);
+  assert.equal((await call(state.employee.photo, null, {public: true})).status, 200);
+  const qr = await (await call('/api/qr' + suffix)).json();
+  assert.equal(new URL(qr.url).host, new URL(base).host);
+  assert.equal(new URL(qr.url).searchParams.get('room'), room.id);
+  assert.equal((await call('/api/qr.svg' + suffix)).status, 200);
+  const template = await call('/api/initial-votes-template.xlsx' + suffix);
+  assert.equal(template.status, 200);
+  const bytes = await template.arrayBuffer();
+  const zip = await JSZip.loadAsync(bytes);
+  assert.match(await zip.file('xl/worksheets/sheet1.xml').async('string'), /EDSP 2024/);
+  const preview = await fetch(base + '/api/import-employees' + suffix, {method: 'POST', headers: {cookie, 'content-type': 'application/octet-stream'}, body: bytes});
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).employees[0].fields['EDSP 2024'], 'A');
+  const socket = new WebSocket(base.replace('http', 'ws') + '/' + suffix);
+  const messages = [];
+  socket.on('message', data => messages.push(JSON.parse(data.toString())));
+  await once(socket, 'open');
+  try {
+    assert.equal((await call('/api/initial-current' + suffix, {index: 1})).status, 200);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.ok(messages.some(message => message.type === 'initial-current' && message.data.employee.id === 'E2'));
+    assert.equal((await (await call('/api/state' + suffix)).json()).employee.id, 'E1');
+    const vote = {employeeId: 'E1', evaluatorId: 'judge', evaluatorName: 'Judge A', pl: 4, pot: 2};
+    assert.equal((await call('/api/vote' + suffix + '&mode=initial', vote, {public: true})).status, 200);
+    const rows = await (await call('/api/results' + suffix + '&mode=initial')).json();
+    assert.equal(rows[0].gridCounts[1], 1);
+    assert.equal((await (await call('/api/results' + suffix)).json())[0].count, 0);
+    const concurrent = await Promise.all(Array.from({length: 12}, (_, i) => call('/api/vote' + suffix + '&mode=initial', {...vote, employeeId: 'E2', evaluatorId: 'concurrent-' + i}, {public: true})));
+    assert.ok(concurrent.every(response => response.status === 200));
+    assert.equal((await (await call('/api/results' + suffix + '&mode=initial')).json())[1].count, 12);
+    await call('/api/decision' + suffix + '&mode=initial', {employeeId: 'E1', type: 'direct', grid: 1, pl: 5});
+    assert.match(await (await call('/api/export-initial-summary.csv' + suffix)).text(), /"PL5","POT3"/);
+    const liveCsv = await (await call('/api/export-live-summary.csv' + suffix)).text();
+    assert.match(liveCsv.split('\r\n')[0], /"Final POT"$/);
+    assert.doesNotMatch(liveCsv, /"PL5","POT3"/);
+    const user = 'cf-user-' + Date.now();
+    assert.equal((await call('/api/accounts', {username: user})).status, 200);
+    await call('/api/auth/login', {username: user, password: 'test12345'});
+    assert.equal((await call('/api/results' + suffix)).status, 403);
+    assert.deepEqual(await (await call('/api/rooms')).json(), []);
+    assert.equal((await call('/api/auth/change-password', {currentPassword: 'test12345', newPassword: 'changed-password'})).status, 200);
+    await call('/api/auth/logout', {});
+    assert.equal((await call('/api/auth/login', {username: user, password: 'changed-password'})).status, 200);
+  } finally { socket.close(); }
+});

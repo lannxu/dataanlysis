@@ -13,4 +13,4 @@ RUN mkdir -p data
 ENV PORT=3001
 EXPOSE 3001
 
-CMD ["pnpm", "start"]
+CMD ["node", "server.mjs"]

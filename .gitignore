@@ -7,3 +7,6 @@ outputs/
 .codex/
 *.inspect.ndjson
 *.log
+.wrangler/
+.dev.vars*
+.env.local

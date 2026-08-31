@@ -1,4 +1,35 @@
-# Talent Review Tool 4.0 - 人才盘点 / 九宫格评估系统
+# Talent Review Tool 3.0 - Cloudflare 版
+
+此分支为 `codex/cloudflare-3.0`。原 VPS 4.0 版保留在 `main`，迁移前提交为 `47ee72b`。版本号 3.0 专指 Cloudflare 版。
+
+## Cloudflare 运行
+
+架构：Workers 托管页面和接口，SQLite-backed Durable Objects 持久化账号及评估并同步 WebSocket，R2 保存照片。无需 VPS、Nginx 或固定监听端口。
+
+需要 Node.js 22 或更新版本、pnpm：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm start
+```
+
+打开 http://127.0.0.1:8787/home.html 。数据保存在 `.wrangler/state/`，与原 `data/session.json` 分开；首次运行为空环境。
+
+```sh
+pnpm test
+pnpm check:cloudflare
+pnpm exec wrangler login
+pnpm exec wrangler r2 bucket create talent-review-photos
+pnpm deploy
+```
+
+部署和旧数据迁移请先阅读 [Cloudflare 部署说明](deploy/CLOUDFLARE.md)。需要启用 Workers、Durable Objects、R2；建议使用 Workers Paid，以支持密码计算与 Excel 导入的 CPU 开销，费用及配额以账户为准。
+
+二维码默认使用当前访问域名，不读取旧 VPS 的 `PUBLIC_URL`。可选 `CLOUDFLARE_PUBLIC_URL` 用于强制统一域名。
+
+当前通过一个持久化协调实例在应用层隔离账号数据，适合现有 Panel 规模；大规模并发需额外压测和分片。原两套评估场景仍然独立。
+
+下面是保留的 **VPS 运行说明**，不是 Cloudflare 部署步骤。也可执行 `pnpm start:vps` 运行原 Node 后端。
 
 ## 本地运行
 
